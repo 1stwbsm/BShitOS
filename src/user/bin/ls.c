@@ -1,8 +1,8 @@
+/* ls [path...]: lists directories; files are listed by name. */
 #include "bs.h"
 
-int main(int argc, char **argv)
+static int list(const char *path, int heading)
 {
-    const char *path = argc > 1 ? argv[1] : ".";
     struct bs_dirent entry;
     int fd = open(path, BS_O_READ), rc;
 
@@ -10,7 +10,15 @@ int main(int argc, char **argv)
         printf("ls: %s: %s\n", path, strerror(fd));
         return 1;
     }
-    while ((rc = readdir(fd, &entry)) > 0) {
+    rc = readdir(fd, &entry);
+    if (rc < 0) { /* not a directory: the path itself is the listing */
+        close(fd);
+        printf("%s\n", path);
+        return 0;
+    }
+    if (heading)
+        printf("\033[1m%s:\033[0m\n", path);
+    for (; rc > 0; rc = readdir(fd, &entry)) {
         if (entry.type == BS_TYPE_DIR)
             printf("\033[94m%s/\033[0m\n", entry.name);
         else if (entry.type == BS_TYPE_SYMLINK)
@@ -24,4 +32,15 @@ int main(int argc, char **argv)
         return 1;
     }
     return 0;
+}
+
+int main(int argc, char **argv)
+{
+    int status = 0;
+
+    if (argc < 2)
+        return list(".", 0);
+    for (int i = 1; i < argc; i++)
+        status |= list(argv[i], argc > 2);
+    return status;
 }

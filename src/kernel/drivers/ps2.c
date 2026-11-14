@@ -25,7 +25,7 @@
 #define SC_RELEASE 0x80
 #define SC_EXTENDED 0xE0
 
-#define KEY_QUEUE 32u
+#define KEY_QUEUE 128u
 #define PACKET_SYNC 0x08
 #define PACKET_X_NEGATIVE 0x10
 #define PACKET_Y_NEGATIVE 0x20

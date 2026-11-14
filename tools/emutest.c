@@ -2,8 +2,8 @@
  * Runs BShitEmu natively, for testing without a browser.
  *
  * usage: emutest <bskern.elf> <root.img> <script>
- * Script lines: "wait MS", "type TEXT", "key CODE" (hex, set 1), "mouse DX DY BUTTONS",
- * "shot FILE.ppm". Serial output goes to stdout.
+ * Script lines: "wait MS", "type TEXT" (~ is Enter), "key CODE" (hex, set 1),
+ * "ctrl LETTER", "mouse DX DY BUTTONS", "shot FILE.ppm". Serial output goes to stdout.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,6 +153,16 @@ int main(int argc, char **argv)
             emu_key(code, 1);
             emu_key(code, 0);
             run_for(25, &status);
+        } else if (strncmp(line, "ctrl ", 5) == 0) {
+            int shift, code = scancode(line[5], &shift);
+
+            if (code >= 0) {
+                emu_key(0x1D, 1);
+                emu_key((u32)code, 1);
+                emu_key((u32)code, 0);
+                emu_key(0x1D, 0);
+                run_for(25, &status);
+            }
         } else if (strncmp(line, "mouse ", 6) == 0) {
             int dx, dy, b;
 

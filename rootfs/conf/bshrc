@@ -1,0 +1,4 @@
+# Run by every interactive bsh before ~/.bshrc. Same syntax as the prompt.
+# Put your own aliases, variables and PATH in ~/.bshrc, which survives rebuilds.
+PATH=/bin:$HOME/bin
+alias ..='cd ..'

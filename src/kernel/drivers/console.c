@@ -19,6 +19,7 @@ static uint8_t attrs[MAX_ROWS][MAX_COLS];
 static uint32_t fg_color = 0xD8D8D8, bg_color = 0x000000;
 static uint8_t current_attr;
 static uint32_t cols, rows, col, row;
+static uint32_t saved_col, saved_row; /* ESC[s / ESC[u */
 static int serial_enabled;
 static int graphics_active;
 static uint32_t utf8_codepoint, utf8_remaining;
@@ -84,6 +85,8 @@ static void newline(void)
         row++;
         return;
     }
+    if (saved_row > 0)
+        saved_row--; /* the saved spot scrolls with the text */
     memmove(cells[0], cells[1], (rows - 1) * MAX_COLS);
     memset(cells[rows - 1], ' ', MAX_COLS);
     memmove(attrs[0], attrs[1], (rows - 1) * MAX_COLS);
@@ -153,16 +156,23 @@ static char glyph_for(uint32_t codepoint)
     }
 }
 
-static void erase_to_line_end(void)
+/* Blank cells are already drawn blank, so erasing only touches the rest. */
+static void erase_cell(uint32_t c, uint32_t r)
 {
-    for (uint32_t c = col; c < cols; c++) {
-        cells[row][c] = ' ';
-        attrs[row][c] = 0;
-        draw_cell(c, row);
-    }
+    if (cells[r][c] == ' ' && attrs[r][c] == 0)
+        return;
+    cells[r][c] = ' ';
+    attrs[r][c] = 0;
+    draw_cell(c, r);
 }
 
-/* The ANSI subset programs use: CUP, ED 2, EL and SGR colours, bold, inverse. */
+static void erase_to_line_end(void)
+{
+    for (uint32_t c = col; c < cols; c++)
+        erase_cell(c, row);
+}
+
+/* The ANSI subset programs use: CUP, CUB, CUF, ED, EL, save/restore and SGR colours, bold, inverse. */
 static void run_escape(char final)
 {
     switch (final) {
@@ -175,8 +185,40 @@ static void run_escape(char final)
             col = cols - 1;
         break;
     case 'J':
-        if (escape_params[0] == 2)
+        if (escape_params[0] == 2) {
             console_clear();
+        } else { /* to the end of the screen */
+            erase_to_line_end();
+            for (uint32_t r = row + 1; r < rows; r++)
+                for (uint32_t c = 0; c < cols; c++)
+                    erase_cell(c, r);
+        }
+        break;
+    case 'D': /* back, wrapping to the previous line */
+        for (uint32_t n = escape_params[0] ? escape_params[0] : 1; n && (col || row); n--) {
+            if (col) {
+                col--;
+            } else {
+                row--;
+                col = cols - 1;
+            }
+        }
+        break;
+    case 'C': /* forward, wrapping to the next line */
+        for (uint32_t n = escape_params[0] ? escape_params[0] : 1; n; n--) {
+            if (col + 1 < cols)
+                col++;
+            else if (row + 1 < rows)
+                row++, col = 0;
+        }
+        break;
+    case 's':
+        saved_col = col;
+        saved_row = row;
+        break;
+    case 'u':
+        col = saved_col < cols ? saved_col : cols - 1;
+        row = saved_row < rows ? saved_row : rows - 1;
         break;
     case 'K':
         erase_to_line_end();

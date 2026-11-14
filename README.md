@@ -8,7 +8,12 @@ A 32-bit hobby operating system written in C, from the bootloader up.
 - **BSFS**: its own filesystem ([docs/BSFS.md](docs/BSFS.md))
 - **The kernel**: paging, ring 3 processes and `int 0x80` system calls, plus drivers
   for the console, framebuffer, PS/2, AHCI, USB and networking
-- **bsh**: the shell, along with programs in the `.BS` format and the shared `libbs.blib`
+- **bsh**: the shell. It colours the line as you type (unknown commands show red before
+  you hit Enter), completes with Tab, filters Up/Down history by what you've typed,
+  searches history with Ctrl+R, and suggests a fix for typos. It also has `;` `&&` `||`,
+  quoting, `$VARS`, globs, aliases, `.bsh` scripts with `$1..$9`, and `~/.bshrc`.
+  `help` prints the cheat sheet.
+- **Programs**: the `.BS` executable format and the shared `libbs.blib`
 - **Desk**: a windowed graphical environment (type `desk`)
 - **web**: a text web browser with HTTPS
 
