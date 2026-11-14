@@ -26,3 +26,12 @@ $(WEB)/root.img: $(ROOTFS_FILES) tools/mkbsfs.py
 	python3 tools/mkbsfs.py $(ROOTFS) $@ --size $(WEB_ROOT_MIB) \
 		--dir userspace/user --dir bin --dir conf --dir lib --dir mnt \
 		--symlink boot/efi=esp:/ --symlink mnt/cd=cd:/ --symlink mnt/usb=usb:/
+
+# The full disk image, zipped, for STARTVM.bat to download. Separate from `web`
+# because it also needs the bootloader toolchain (i686-w64-mingw32-gcc).
+.PHONY: web-disk
+web-disk: $(WEB)/BShitOS-disk.zip
+
+$(WEB)/BShitOS-disk.zip: $(IMAGE)
+	@mkdir -p $(dir $@)
+	python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED, compresslevel=9).write(sys.argv[2], 'BShitOS.img')" $@ $<
