@@ -1,0 +1,10 @@
+# Build output
+build/
+out/
+__pycache__/
+
+# Large or local-only files
+*.iso
+*.zip
+*.img
+res/dnb.pcm
