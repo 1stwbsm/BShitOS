@@ -300,6 +300,21 @@ int vfs_stat(const char *cwd, const char *path, struct bs_stat *out)
     return 0;
 }
 
+int vfs_readlink(const char *cwd, const char *path, char *out, uint32_t size)
+{
+    char clean[BS_PATH_MAX];
+    struct vnode node;
+    int rc = normalize(cwd, path, clean);
+
+    if (rc == 0)
+        rc = walk(volumes[0].root, clean, 0, 0, &node);
+    if (rc < 0)
+        return rc;
+    if (node.type != BS_TYPE_SYMLINK || !node.ops->readlink)
+        return -BS_EINVAL;
+    return node.ops->readlink(&node, out, size);
+}
+
 int vfs_chmod(const char *cwd, const char *path, uint32_t perm)
 {
     struct vnode node;

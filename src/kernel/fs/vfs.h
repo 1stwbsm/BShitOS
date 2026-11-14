@@ -53,6 +53,8 @@ int vfs_chdir(const char *cwd, const char *path, char *out);
 /* Permissions are checked against the running process; root passes everything. */
 int vfs_permit(const struct vnode *node, uint32_t want);
 int vfs_stat(const char *cwd, const char *path, struct bs_stat *out);
+/* A symlink's target, without following it. */
+int vfs_readlink(const char *cwd, const char *path, char *out, uint32_t size);
 int vfs_chmod(const char *cwd, const char *path, uint32_t perm);
 int vfs_chown(const char *cwd, const char *path, uint32_t uid, uint32_t gid);
 /* While set, the kernel acts for itself (reading /conf/shadow) and skips checks. */

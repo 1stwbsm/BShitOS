@@ -14,6 +14,13 @@ A 32-bit hobby operating system written in C, from the bootloader up.
   quoting, `$VARS`, globs, aliases, `.bsh` scripts with `$1..$9`, and `~/.bshrc`.
   `help` prints the cheat sheet.
 - **Programs**: the `.BS` executable format and the shared `libbs.blib`
+- **Users**: accounts with Unix-style owner/group/other permissions, enforced by the
+  kernel for everyone but root. Passwords are PBKDF2-SHA256 hashes in a root-only
+  `/conf/shadow`, checked by the kernel. Comes with `login`, `su`, `passwd`,
+  `useradd`, `userdel`, `chmod`, `chown`, `id` and `ls -l`.
+- **Installer**: `su -c install` on the live ISO puts BShitOS on a SATA disk. It
+  partitions the disk (GPT, ESP, BSFS filling the rest), copies the system and
+  creates your account and a root password.
 - **Desk**: a windowed graphical environment (type `desk`)
 - **web**: a text web browser with HTTPS
 
@@ -23,12 +30,15 @@ You need gcc with 32-bit support, GNU ld and Python 3. QEMU with the i386 OVMF/e
 firmware runs it.
 
 ```
-./STARTVM.sh          # build and boot out/BShitOS.img in QEMU
-./STARTVM.sh --live   # boot the live ISO instead
-make                  # just build the disk image
+./STARTVM.sh            # build and boot out/BShitOS.img in QEMU
+./STARTVM.sh --live     # boot the live ISO, with a blank out/target.img to install onto
+./STARTVM.sh --target   # boot whatever got installed onto out/target.img
+make                    # just build the disk image
 ```
 
-Files in `/userspace` carry over when you rebuild the disk image.
+Files in `/userspace` carry over when you rebuild the disk image. That image logs
+in as `user` with an empty password, and root's password is empty too; set real
+ones with `passwd`. The live ISO logs straight in as `user`.
 
 ### Windows
 

@@ -40,6 +40,11 @@ int stat(const char *path, struct bs_stat *out);
 int chmod(const char *path, unsigned int perm);
 int chown(const char *path, unsigned int uid, unsigned int gid);
 int set_password(const char *name, const char *old_password, const char *new_password);
+int readlink(const char *path, char *out, unsigned int size); /* returns the length */
+/* The SATA disk, raw (root only; no writing while the system runs from it). */
+int disk_info(struct bs_disk_info *out);
+int disk_read(const struct bs_disk_io *io);
+int disk_write(const struct bs_disk_io *io);
 /* /conf/passwd and /conf/group lookups (users.c). 0 on success. */
 int user_by_name(const char *name, struct bs_user *out);
 int user_name(unsigned int uid, char *out, unsigned int size);

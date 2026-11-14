@@ -13,6 +13,8 @@ int ahci_has_disk(void);
 int ahci_has_cd(void);
 int ahci_read(uint64_t lba, uint32_t sectors, void *buf);
 int ahci_write(uint64_t lba, uint32_t sectors, const void *buf);
+/* The disk's size in sectors and its model name (IDENTIFY DEVICE). */
+int ahci_identify(uint64_t *sectors, char *model, uint32_t model_size);
 int ahci_cd_read(uint32_t lba, uint32_t sectors, void *buf);
 
 #endif

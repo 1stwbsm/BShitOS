@@ -15,16 +15,35 @@ VARS=build/efivars.fd
 
 # Only rebuilds when sources changed. Files in /userspace are carried over into
 # the new disk; everything else is rebuilt.
-# ./STARTVM.sh --live boots the live ISO as a CD instead of the hard disk.
+#
+#   ./STARTVM.sh            boot out/BShitOS.img
+#   ./STARTVM.sh --live     boot the live ISO, with out/target.img attached as a
+#                           blank disk to try the installer on (su -c install)
+#   ./STARTVM.sh --target   boot out/target.img, once something is installed on it
 LIVE_ISO=out/BShitOS-live.iso
-if [ "${1:-}" = "--live" ]; then
+TARGET=out/target.img
+TARGET_SIZE=2G
+disk() { echo "-drive if=none,id=disk,format=raw,file=$1 -device ide-hd,drive=disk,bus=ide.0,bootindex=1"; }
+case "${1:-}" in
+--live)
     shift
     make -j"$(nproc)" --no-print-directory iso
-    STORAGE="-cdrom $LIVE_ISO"
-else
+    [ -f "$TARGET" ] || truncate -s "$TARGET_SIZE" "$TARGET"
+    STORAGE="$(disk "$TARGET") -drive if=none,id=cd,media=cdrom,file=$LIVE_ISO -device ide-cd,drive=cd,bus=ide.1,bootindex=0"
+    ;;
+--target)
+    shift
+    if [ ! -f "$TARGET" ]; then
+        echo "STARTVM: $TARGET does not exist yet; install onto it with --live first" >&2
+        exit 1
+    fi
+    STORAGE="$(disk "$TARGET")"
+    ;;
+*)
     make -j"$(nproc)" --no-print-directory
-    STORAGE="-drive if=none,id=disk,format=raw,file=$IMAGE -device ide-hd,drive=disk,bootindex=1"
-fi
+    STORAGE="$(disk "$IMAGE")"
+    ;;
+esac
 
 for file in "$FIRMWARE" "$VARS_TEMPLATE"; do
     if [ ! -f "$file" ]; then

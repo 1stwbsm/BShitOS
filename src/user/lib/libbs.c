@@ -43,6 +43,10 @@ int stat(const char *path, struct bs_stat *out) { return syscall3(SYS_STAT, (int
 int chmod(const char *path, unsigned int perm) { return syscall3(SYS_CHMOD, (int)path, (int)perm, 0); }
 int chown(const char *path, unsigned int uid, unsigned int gid) { return syscall3(SYS_CHOWN, (int)path, (int)uid, (int)gid); }
 int set_password(const char *name, const char *old_password, const char *new_password) { return syscall3(SYS_SETPASS, (int)name, (int)old_password, (int)new_password); }
+int readlink(const char *path, char *out, unsigned int size) { return syscall3(SYS_READLINK, (int)path, (int)out, (int)size); }
+int disk_info(struct bs_disk_info *out) { return syscall3(SYS_DISK_INFO, (int)out, 0, 0); }
+int disk_read(const struct bs_disk_io *io) { return syscall3(SYS_DISK_READ, (int)io, 0, 0); }
+int disk_write(const struct bs_disk_io *io) { return syscall3(SYS_DISK_WRITE, (int)io, 0, 0); }
 int console_line(int row, char *out, unsigned int size) { return syscall3(SYS_CONSOLE_LINE, row, (int)out, (int)size); }
 void poweroff(void) { syscall3(SYS_POWEROFF, 0, 0, 0); }
 void net_info(struct bs_netinfo *out) { syscall3(SYS_NET_INFO, (int)out, 0, 0); }

@@ -13,6 +13,7 @@ enum {
     SYS_TCP_OPEN, SYS_TCP_SEND, SYS_TCP_RECEIVE, SYS_TCP_CLOSE,
     SYS_GRAPHICS_END, SYS_SYSINFO, SYS_CONSOLE_LINE,
     SYS_LOGIN, SYS_WHOAMI, SYS_STAT, SYS_CHMOD, SYS_CHOWN, SYS_SETPASS,
+    SYS_READLINK, SYS_DISK_INFO, SYS_DISK_READ, SYS_DISK_WRITE,
 };
 
 /* Negative syscall results */
@@ -103,6 +104,23 @@ struct bs_user {
 struct bs_stat {
     uint32_t type, size, perm, uid, gid;
 };
+
+/* The SATA disk, for the installer. Raw access is root only, and writing is
+ * refused while the running system's root filesystem lives on it. */
+struct bs_disk_info {
+    uint32_t present, in_use;
+    uint32_t sectors_low, sectors_high; /* 512-byte sectors */
+    char model[44];
+};
+
+struct bs_disk_io {
+    uint32_t lba_low, lba_high;
+    uint32_t sectors; /* at most BS_DISK_IO_MAX per call */
+    uint32_t buffer;
+};
+
+#define BS_DISK_SECTOR 512u
+#define BS_DISK_IO_MAX 128u
 
 #define BS_UID_ROOT 0u
 #define BS_USER_NAME_MAX 32u

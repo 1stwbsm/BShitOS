@@ -1,4 +1,5 @@
 #include "drivers/acpi.h"
+#include "drivers/ahci.h"
 #include "drivers/console.h"
 #include "drivers/fb.h"
 #include "fs/partitions.h"
@@ -11,6 +12,8 @@
 #include "proc/users.h"
 
 #define FB_BLIT_MAX 2048u
+
+extern int system_live;
 #define SPAWN_ARGS_MAX 16
 #define SPAWN_BYTES_MAX 1024u
 
@@ -301,6 +304,72 @@ static int sys_chown(uint32_t path_ptr, uint32_t uid, uint32_t gid)
     return rc < 0 ? rc : vfs_chown(proc_current()->cwd, path, uid, gid);
 }
 
+static int sys_readlink(uint32_t path_ptr, uint32_t out, uint32_t size)
+{
+    char path[BS_PATH_MAX];
+    int rc = copy_string(path_ptr, path, sizeof(path));
+
+    if (rc < 0)
+        return rc;
+    if (!user_range_ok(out, size) || size == 0)
+        return -BS_EFAULT;
+    return vfs_readlink(proc_current()->cwd, path, (char *)out, size);
+}
+
+static int is_root(void)
+{
+    return proc_current()->user.uid == BS_UID_ROOT;
+}
+
+static int sys_disk_info(uint32_t out)
+{
+    struct bs_disk_info *info = (struct bs_disk_info *)out;
+    uint64_t sectors = 0;
+
+    if (!user_range_ok(out, sizeof(*info)))
+        return -BS_EFAULT;
+    memset(info, 0, sizeof(*info));
+    if (!ahci_has_disk() || ahci_identify(&sectors, info->model, sizeof(info->model)) < 0)
+        return 0;
+    info->present = 1;
+    info->in_use = !system_live;
+    info->sectors_low = (uint32_t)sectors;
+    info->sectors_high = (uint32_t)(sectors >> 32);
+    return 0;
+}
+
+/* User memory is not identity-mapped, so DMA goes through this. */
+static uint8_t bounce[BS_DISK_IO_MAX * BS_DISK_SECTOR] __attribute__((aligned(16)));
+
+static int sys_disk_io(uint32_t request, int write)
+{
+    struct bs_disk_io io;
+    uint64_t lba;
+    uint32_t bytes;
+
+    if (!is_root())
+        return -BS_EPERM;
+    if (!user_range_ok(request, sizeof(io)))
+        return -BS_EFAULT;
+    memcpy(&io, (const void *)request, sizeof(io));
+    bytes = io.sectors * BS_DISK_SECTOR;
+    if (io.sectors == 0 || io.sectors > BS_DISK_IO_MAX || !user_range_ok(io.buffer, bytes))
+        return -BS_EINVAL;
+    if (!ahci_has_disk())
+        return -BS_ENOENT;
+    if (write && !system_live)
+        return -BS_EPERM; /* the running system lives on this disk */
+    lba = (uint64_t)io.lba_high << 32 | io.lba_low;
+    if (write) {
+        memcpy(bounce, (const void *)io.buffer, bytes);
+        return ahci_write(lba, io.sectors, bounce) < 0 ? -BS_EIO : 0;
+    }
+    if (ahci_read(lba, io.sectors, bounce) < 0)
+        return -BS_EIO;
+    memcpy((void *)io.buffer, bounce, bytes);
+    return 0;
+}
+
 static int sys_spawn(uint32_t path_ptr, int argc, uint32_t argv_ptr)
 {
     static char storage[SPAWN_BYTES_MAX];
@@ -366,6 +435,10 @@ int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c)
     case SYS_CHMOD:   return sys_chmod(a, b);
     case SYS_CHOWN:   return sys_chown(a, b, c);
     case SYS_SETPASS: return sys_setpass(a, b, c);
+    case SYS_READLINK: return sys_readlink(a, b, c);
+    case SYS_DISK_INFO: return sys_disk_info(a);
+    case SYS_DISK_READ: return sys_disk_io(a, 0);
+    case SYS_DISK_WRITE: return sys_disk_io(a, 1);
     case SYS_CONSOLE_LINE:
         return user_range_ok(b, c) && c ? console_line(a, (char *)b, c) : -BS_EFAULT;
     default:          return -BS_EINVAL;

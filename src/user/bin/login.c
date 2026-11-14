@@ -60,7 +60,7 @@ int main(void)
     sysinfo(&info);
     if ((info.flags & BS_SYSINFO_LIVE) && conf_get(CONF_PATH, "live_user", live_user, sizeof(live_user)) == 0 &&
         login(live_user, 0) == 0) {
-        printf("\033[90mlive session: logged in as %s. 'su' for root (no password), 'install' to install.\033[0m\n",
+        printf("\033[90mlive session: logged in as %s. root's password is empty: 'su -c install' installs to disk.\033[0m\n",
                live_user);
         return start_session();
     }

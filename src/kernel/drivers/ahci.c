@@ -40,6 +40,7 @@
 #define ATA_READ_DMA_EXT 0x25
 #define ATA_WRITE_DMA_EXT 0x35
 #define ATA_FLUSH_CACHE_EXT 0xEA
+#define ATA_IDENTIFY 0xEC
 #define ATA_PACKET 0xA0
 #define SCSI_READ_10 0x28
 #define FIS_REG_H2D 0x27
@@ -229,6 +230,33 @@ int ahci_write(uint64_t lba, uint32_t sectors, const void *buf)
     if (ata_command(ATA_WRITE_DMA_EXT, lba, sectors, (void *)buf, 1) < 0)
         return -1;
     return ata_command(ATA_FLUSH_CACHE_EXT, 0, 0, 0, 0);
+}
+
+int ahci_identify(uint64_t *sectors, char *model, uint32_t model_size)
+{
+    static uint16_t id[256] __attribute__((aligned(16)));
+    struct command_table *t = &disk.table;
+    uint32_t n = 0;
+
+    memset(t, 0, sizeof(*t));
+    t->cfis[0] = FIS_REG_H2D;
+    t->cfis[1] = FIS_COMMAND_BIT;
+    t->cfis[2] = ATA_IDENTIFY;
+    if (issue(&disk, 0, sizeof(id), id) < 0)
+        return -1;
+    /* words 100-103: LBA48 sector count; 60-61 is the 28-bit fallback */
+    *sectors = (uint64_t)id[100] | (uint64_t)id[101] << 16 | (uint64_t)id[102] << 32 | (uint64_t)id[103] << 48;
+    if (*sectors == 0)
+        *sectors = (uint32_t)id[60] | (uint32_t)id[61] << 16;
+    /* words 27-46: the model, two characters per word, high byte first */
+    for (uint32_t w = 27; w <= 46 && n + 2 < model_size; w++) {
+        model[n++] = (char)(id[w] >> 8);
+        model[n++] = (char)id[w];
+    }
+    while (n > 0 && model[n - 1] == ' ')
+        n--;
+    model[n] = 0;
+    return 0;
 }
 
 int ahci_cd_read(uint32_t lba, uint32_t sectors, void *buf)

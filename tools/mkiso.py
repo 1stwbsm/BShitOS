@@ -5,6 +5,10 @@ usage: mkiso.py <esp-directory> <bsfs-image> <output-iso>
 
 The boot image is a FAT filesystem holding BSBOOT and a copy of the BSFS root
 at \\LIVE\\ROOTFS.IMG, which BSBOOT loads into RAM.
+
+ESP.IMG, a plain file on the disc, is the EFI System Partition for an installed
+disk (BSBOOT and \\RES, made for LBA 2048). The installer copies it as is; it is
+stored without its trailing zeros, and its FAT boot sector gives the full size.
 """
 import os
 import shutil
@@ -25,6 +29,7 @@ PATH_M_LBA = 21
 ROOT_LBA = 22
 IMAGE_LBA = 23
 BOOT_IMAGE_NAME = b"EFIBOOT.IMG;1"
+ESP_IMAGE_NAME = b"ESP.IMG;1"  # sorts after EFIBOOT.IMG, as ISO9660 requires
 FLAG_DIRECTORY = 2
 DATE = bytes([126, 1, 1, 0, 0, 0, 0])
 LONG_DATE = b"0" * 16 + b"\0"
@@ -60,6 +65,15 @@ def build_boot_image(esp_directory, bsfs_path):
         root = fat.alloc(mkimage.dir_clusters(tree, top=True))
         fat.add_dir(tree, root, None)
         return bytes(fat.finish(0))
+
+
+def build_install_esp(esp_directory):
+    """The installed disk's ESP, as mkimage.py builds it, minus trailing zeros."""
+    size = max(mkimage.MIN_ESP_BYTES, mkimage.tree_bytes(esp_directory) * 2 + mkimage.HEADROOM_BYTES)
+    fat = mkimage.Fat32(size // FAT_SECTOR)
+    root = fat.alloc(mkimage.dir_clusters(esp_directory, top=True))
+    fat.add_dir(esp_directory, root, None)
+    return bytes(fat.finish(mkimage.ESP_START_LBA)).rstrip(b"\0")
 
 
 def boot_catalog():
@@ -110,11 +124,14 @@ def main():
 
     image = build_boot_image(esp_directory, bsfs_path)
     image_sectors = (len(image) + SECTOR - 1) // SECTOR
-    total = IMAGE_LBA + image_sectors
+    install_esp = build_install_esp(esp_directory)
+    esp_lba = IMAGE_LBA + image_sectors
+    total = esp_lba + (len(install_esp) + SECTOR - 1) // SECTOR
 
     root = directory_record(b"\0", ROOT_LBA, SECTOR, FLAG_DIRECTORY)
     root += directory_record(b"\1", ROOT_LBA, SECTOR, FLAG_DIRECTORY)
     root += directory_record(BOOT_IMAGE_NAME, IMAGE_LBA, len(image), 0)
+    root += directory_record(ESP_IMAGE_NAME, esp_lba, len(install_esp), 0)
     root_for_pvd = directory_record(b"\0", ROOT_LBA, SECTOR, FLAG_DIRECTORY)
 
     boot_record = bytearray(SECTOR)
@@ -142,6 +159,7 @@ def main():
     put(PATH_M_LBA, path_table(True))
     put(ROOT_LBA, root)
     put(IMAGE_LBA, image)
+    put(esp_lba, install_esp)
 
     temporary = output + ".tmp"
     with open(temporary, "wb") as f:
