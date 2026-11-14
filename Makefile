@@ -24,7 +24,6 @@ all: $(IMAGE)
 include src/boot/boot.mk
 include src/kernel/kernel.mk
 include src/user/user.mk
-include src/web/web.mk
 
 # Everything in res/ ships on the boot partition under \RES.
 RES_FILES := $(wildcard res/*)
@@ -68,6 +67,9 @@ iso: $(LIVE_ISO)
 
 $(LIVE_ISO): $(ESP_FILES) $(BSFS_IMAGE) tools/mkiso.py tools/mkimage.py
 	python3 tools/mkiso.py $(ESP) $(BSFS_IMAGE) $@
+
+# Last, so it sees every file that goes on the root filesystem.
+include src/web/web.mk
 
 run: all
 	./STARTVM.sh
