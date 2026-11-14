@@ -8,6 +8,7 @@
 #include "lib/string.h"
 #include "net/net.h"
 #include "proc/proc.h"
+#include "proc/users.h"
 
 #define FB_BLIT_MAX 2048u
 #define SPAWN_ARGS_MAX 16
@@ -93,7 +94,13 @@ static int sys_open(uint32_t path_ptr, uint32_t flags)
 
     if (rc < 0)
         return rc;
-    rc = flags & BS_O_WRITE ? vfs_open_write(p->cwd, path, &node) : vfs_open(p->cwd, path, &node);
+    if (flags & BS_O_WRITE) {
+        rc = vfs_open_write(p->cwd, path, &node);
+    } else {
+        rc = vfs_open(p->cwd, path, &node);
+        if (rc == 0)
+            rc = vfs_permit(&node, VFS_READ);
+    }
     if (rc < 0)
         return rc;
 
@@ -212,6 +219,7 @@ static int sys_dns(uint32_t name_ptr, uint32_t out)
 }
 
 uint32_t boot_seconds;
+int system_live;
 
 static int sys_sysinfo(uint32_t out)
 {
@@ -223,7 +231,74 @@ static int sys_sysinfo(uint32_t out)
     bsfs_usage(&info->disk_total_kib, &info->disk_free_kib);
     info->uptime_seconds = rtc_seconds() - boot_seconds;
     fb_resolution(&info->screen_width, &info->screen_height);
+    info->flags = system_live ? BS_SYSINFO_LIVE : 0;
     return 0;
+}
+
+static int sys_login(uint32_t name_ptr, uint32_t password_ptr)
+{
+    char name[BS_USER_NAME_MAX], password[128];
+    int rc = copy_string(name_ptr, name, sizeof(name));
+
+    if (rc >= 0 && password_ptr)
+        rc = copy_string(password_ptr, password, sizeof(password));
+    if (rc < 0)
+        return rc;
+    rc = users_login(name, password_ptr ? password : 0);
+    memset(password, 0, sizeof(password));
+    return rc;
+}
+
+static int sys_setpass(uint32_t name_ptr, uint32_t old_ptr, uint32_t new_ptr)
+{
+    char name[BS_USER_NAME_MAX], old_password[128], new_password[128];
+    int rc = copy_string(name_ptr, name, sizeof(name));
+
+    if (rc >= 0)
+        rc = copy_string(old_ptr, old_password, sizeof(old_password));
+    if (rc >= 0)
+        rc = copy_string(new_ptr, new_password, sizeof(new_password));
+    if (rc >= 0)
+        rc = users_set_password(name, old_password, new_password);
+    memset(old_password, 0, sizeof(old_password));
+    memset(new_password, 0, sizeof(new_password));
+    return rc;
+}
+
+static int sys_whoami(uint32_t out)
+{
+    if (!user_range_ok(out, sizeof(struct bs_user)))
+        return -BS_EFAULT;
+    memcpy((void *)out, &proc_current()->user, sizeof(struct bs_user));
+    return 0;
+}
+
+static int sys_stat(uint32_t path_ptr, uint32_t out)
+{
+    char path[BS_PATH_MAX];
+    int rc = copy_string(path_ptr, path, sizeof(path));
+
+    if (rc < 0)
+        return rc;
+    if (!user_range_ok(out, sizeof(struct bs_stat)))
+        return -BS_EFAULT;
+    return vfs_stat(proc_current()->cwd, path, (struct bs_stat *)out);
+}
+
+static int sys_chmod(uint32_t path_ptr, uint32_t perm)
+{
+    char path[BS_PATH_MAX];
+    int rc = copy_string(path_ptr, path, sizeof(path));
+
+    return rc < 0 ? rc : vfs_chmod(proc_current()->cwd, path, perm);
+}
+
+static int sys_chown(uint32_t path_ptr, uint32_t uid, uint32_t gid)
+{
+    char path[BS_PATH_MAX];
+    int rc = copy_string(path_ptr, path, sizeof(path));
+
+    return rc < 0 ? rc : vfs_chown(proc_current()->cwd, path, uid, gid);
 }
 
 static int sys_spawn(uint32_t path_ptr, int argc, uint32_t argv_ptr)
@@ -285,6 +360,12 @@ int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c)
     case SYS_TCP_CLOSE: return tcp_close((int)a);
     case SYS_GRAPHICS_END: console_graphics_end(); return 0;
     case SYS_SYSINFO: return sys_sysinfo(a);
+    case SYS_LOGIN:   return sys_login(a, b);
+    case SYS_WHOAMI:  return sys_whoami(a);
+    case SYS_STAT:    return sys_stat(a, b);
+    case SYS_CHMOD:   return sys_chmod(a, b);
+    case SYS_CHOWN:   return sys_chown(a, b, c);
+    case SYS_SETPASS: return sys_setpass(a, b, c);
     case SYS_CONSOLE_LINE:
         return user_range_ok(b, c) && c ? console_line(a, (char *)b, c) : -BS_EFAULT;
     default:          return -BS_EINVAL;

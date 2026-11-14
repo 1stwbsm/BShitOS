@@ -6,11 +6,10 @@
 #define ROW_H 13
 #define BAR_H 20
 #define DOUBLE_CLICK_FRAMES 20
-#define START "/userspace/user"
 
 static struct bs_dirent entries[MAX_ENTRIES];
 static int entry_count, selected = -1, scroll, last_click_frame = -100, last_click_row = -1;
-static char path[BS_PATH_MAX] = START;
+static char path[BS_PATH_MAX];
 static char status[64];
 
 static int load(const char *new_path)
@@ -83,7 +82,7 @@ static void open_entry(int index)
 
 static void files_open(const char *arg)
 {
-    if (load(arg ? arg : path) < 0)
+    if (load(arg ? arg : path[0] ? path : desk_home()) < 0)
         load("/");
 }
 

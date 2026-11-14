@@ -10,16 +10,20 @@
 #define CONF_PATH "/conf/bsh.conf"
 #define MOTD_PATH "/conf/motd"
 #define SYSTEM_RC "/conf/bshrc"
-#define DEFAULT_PROMPT "%{93}%d%{0}%?%t %{1}>>%{0} "
+#define DEFAULT_PROMPT "%u %{93}%d%{0}%?%t %{1}>>%{0} "
 
 static unsigned int last_took;
+
+static struct bs_user me;
 
 static void defaults(void)
 {
     char value[256];
 
+    whoami(&me);
     var_set("PATH", "/bin");
-    var_set("HOME", conf_get(CONF_PATH, "home", value, sizeof(value)) == 0 ? value : "/userspace/user");
+    var_set("HOME", me.home);
+    var_set("USER", me.name);
     var_set("PROMPT", conf_get(CONF_PATH, "prompt", value, sizeof(value)) == 0 ? value : DEFAULT_PROMPT);
 }
 
@@ -47,8 +51,9 @@ static void run_rc(const char *path)
 }
 
 /*
- * $PROMPT codes: %d directory (~ for $HOME), %? " ?N" when the last command
- * failed, %t " Ns" when it took 2 s or more, %{codes} an SGR colour, %% a %.
+ * $PROMPT codes: %u user (red when root), %d directory (~ for $HOME), %? " ?N"
+ * when the last command failed, %t " Ns" when it took 2 s or more,
+ * %{codes} an SGR colour, %% a %.
  */
 static void build_prompt(char *out, unsigned int size)
 {
@@ -76,6 +81,10 @@ static void build_prompt(char *out, unsigned int size)
             } else {
                 append(out, size, cwd);
             }
+        } else if (*p == 'u') {
+            append(out, size, me.uid == BS_UID_ROOT ? C_ERROR : C_VAR);
+            append(out, size, me.name);
+            append(out, size, C_RESET);
         } else if (*p == '?') {
             if (last_status) {
                 format_uint((unsigned int)last_status, number);
@@ -182,7 +191,8 @@ int main(int argc, char **argv)
     if (argc > 1)
         return run_script(argv[1], argc - 1, argv + 1);
 
-    show_motd();
+    if (argv[0][0] == '-') /* login shell: greet, start at home */
+        show_motd();
     chdir(var_get("HOME"));
     getcwd(cwd, sizeof(cwd));
     var_set("PWD", cwd);

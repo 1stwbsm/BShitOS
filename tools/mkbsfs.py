@@ -2,6 +2,10 @@
 """Build a BSFS partition image from a directory tree. See docs/BSFS.md.
 
 usage: mkbsfs.py <tree> <image> [--size MIB] [--dir PATH]... [--symlink PATH=TARGET]...
+
+Owners and modes: everything belongs to root, except that each account's home
+in the tree's conf/passwd belongs to that account (and is 0700, like /root).
+Programs (.bs .blib .elf) are 0755, other files 0644, conf/shadow 0600.
 """
 import argparse
 import os
@@ -15,7 +19,7 @@ PTRS = BLOCK // 4
 INODE_COUNT = 4096
 NAME_MAX = 57
 TYPE_FILE, TYPE_DIR, TYPE_SYMLINK = 1, 2, 3
-PERM_DEFAULT = 0o755
+EXECUTABLE = (".bs", ".blib", ".elf")
 
 
 class Symlink:
@@ -53,6 +57,18 @@ def insert(tree, path, value):
         tree[parts[-1]] = {} if value is None else value
 
 
+def accounts(tree):
+    """{home path without the leading slash: (uid, gid)} from conf/passwd."""
+    homes = {}
+    data = tree.get("conf", {}).get("passwd") if isinstance(tree.get("conf"), dict) else None
+    if isinstance(data, bytes):
+        for line in data.decode().splitlines():
+            fields = line.split(":")
+            if len(fields) >= 4 and not line.startswith("#") and fields[3].strip("/"):
+                homes[fields[3].strip("/")] = (int(fields[1]), int(fields[2]))
+    return homes
+
+
 class Image:
     def __init__(self, size):
         self.total = size // BLOCK
@@ -66,6 +82,7 @@ class Image:
         self.disk = bytearray(self.total * BLOCK)
         self.next_block = self.data_start
         self.next_inode = 1  # inode 0 is never used
+        self.homes = {}
 
     def alloc_block(self):
         if self.next_block >= self.total:
@@ -107,13 +124,29 @@ class Image:
             double = self.put_table(tables)
         return direct, indirect, double
 
-    def put_inode(self, ino, kind, data):
+    def meta(self, path, kind):
+        """(perm, uid, gid) for a path like "conf/shadow"."""
+        uid = gid = 0
+        for home, owner in self.homes.items():
+            if path == home or path.startswith(home + "/"):
+                uid, gid = owner
+        if kind == TYPE_SYMLINK:
+            return 0o777, uid, gid
+        if kind == TYPE_DIR:
+            private = path == "root" or path in self.homes
+            return (0o700 if private else 0o755), uid, gid
+        if path == "conf/shadow":
+            return 0o600, 0, 0
+        return (0o755 if path.endswith(EXECUTABLE) else 0o644), uid, gid
+
+    def put_inode(self, ino, kind, data, path):
         direct, indirect, double = self.store(data)
-        raw = struct.pack("<HHIQQ12III48x", kind, PERM_DEFAULT, 1, len(data), 0, *direct, indirect, double)
+        perm, uid, gid = self.meta(path, kind)
+        raw = struct.pack("<HHIQQ12IIIII40x", kind, perm, 1, len(data), 0, *direct, indirect, double, uid, gid)
         offset = self.itable_start * BLOCK + ino * INODE
         self.disk[offset:offset + INODE] = raw
 
-    def add(self, node, ino=None):
+    def add(self, node, ino=None, path=""):
         """Write node and its children; return (inode, type)."""
         if ino is None:
             ino = self.alloc_inode()
@@ -123,16 +156,16 @@ class Image:
                 encoded = name.encode("ascii")
                 if len(encoded) > NAME_MAX:
                     raise SystemExit(f"mkbsfs: name too long: {name}")
-                child, kind = self.add(node[name])
+                child, kind = self.add(node[name], path=f"{path}/{name}".lstrip("/"))
                 entries += struct.pack("<IBB58s", child, kind, len(encoded), encoded)
             # Directories occupy whole blocks so free slots can be reused.
             padded = max(1, (len(entries) + BLOCK - 1) // BLOCK) * BLOCK
-            self.put_inode(ino, TYPE_DIR, bytes(entries.ljust(padded, b"\0")))
+            self.put_inode(ino, TYPE_DIR, bytes(entries.ljust(padded, b"\0")), path)
             return ino, TYPE_DIR
         if isinstance(node, Symlink):
-            self.put_inode(ino, TYPE_SYMLINK, node.target.encode("ascii"))
+            self.put_inode(ino, TYPE_SYMLINK, node.target.encode("ascii"), path)
             return ino, TYPE_SYMLINK
-        self.put_inode(ino, TYPE_FILE, node)
+        self.put_inode(ino, TYPE_FILE, node, path)
         return ino, TYPE_FILE
 
     @staticmethod
@@ -176,6 +209,7 @@ def main():
         insert(tree, path, Symlink(target))
 
     image = Image(args.size * 1024 * 1024)
+    image.homes = accounts(tree)
     root = image.alloc_inode()
     image.add(tree, root)
     with open(args.image, "wb") as f:

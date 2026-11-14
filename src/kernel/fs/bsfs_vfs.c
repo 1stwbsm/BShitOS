@@ -223,6 +223,10 @@ static void fill_vnode(uint32_t ino, const struct bsfs_inode *in, struct vnode *
     out->id = ino;
     out->type = in->type;
     out->size = (uint32_t)in->size;
+    out->owned = 1;
+    out->perm = in->perm & 0777;
+    out->uid = in->uid;
+    out->gid = in->gid;
 }
 
 /* ---- VFS operations --------------------------------------------------- */
@@ -327,7 +331,8 @@ static int add_entry(uint32_t dir_ino, const struct bsfs_dirent *entry)
     return write_inode(dir_ino, &dir);
 }
 
-static int op_create(const struct vnode *dir, const char *name, uint32_t type, struct vnode *out)
+static int op_create(const struct vnode *dir, const char *name, uint32_t type, uint32_t perm, uint32_t uid,
+                     uint32_t gid, struct vnode *out)
 {
     struct bsfs_inode parent, in;
     struct bsfs_dirent entry;
@@ -354,7 +359,9 @@ static int op_create(const struct vnode *dir, const char *name, uint32_t type, s
 
     memset(&in, 0, sizeof(in));
     in.type = (uint16_t)type;
-    in.perm = 0755;
+    in.perm = (uint16_t)(perm & 0777);
+    in.uid = uid;
+    in.gid = gid;
     in.links = 1;
     if (type == BSFS_TYPE_DIR) {
         uint32_t first;
@@ -497,6 +504,22 @@ static int op_unlink(const struct vnode *dir, const char *name)
     return write_super();
 }
 
+static int op_setattr(struct vnode *node, uint32_t perm, uint32_t uid, uint32_t gid)
+{
+    struct bsfs_inode in;
+    int rc;
+
+    if (bsfs_read_inode(&fs, node->id, &in) < 0)
+        return -BS_EIO;
+    in.perm = (uint16_t)(perm & 0777);
+    in.uid = uid;
+    in.gid = gid;
+    rc = write_inode(node->id, &in);
+    if (rc == 0)
+        fill_vnode(node->id, &in, node);
+    return rc;
+}
+
 static const struct fs_ops bsfs_ops = {
     .lookup = op_lookup,
     .read = op_read,
@@ -506,6 +529,7 @@ static const struct fs_ops bsfs_ops = {
     .write = op_write,
     .truncate = op_truncate,
     .unlink = op_unlink,
+    .setattr = op_setattr,
 };
 
 void bsfs_usage(uint32_t *total_kib, uint32_t *free_kib)

@@ -66,6 +66,10 @@ void terminal_run(const char *command);
 /* Opens a text file in Notes. */
 void notes_open(const char *path);
 void settings_load(void);
+/* Settings come from ~/.desk.conf, then /conf/desk.conf; changes go to ~/.desk.conf. */
+int desk_conf_get(const char *key, char *out, unsigned int size);
+int desk_conf_set(const char *key, const char *value);
+const char *desk_home(void);
 int settings_mouse_speed(void);
 /* Programs that need the whole screen, from /conf/desk.conf. */
 int desk_is_fullscreen(const char *program);

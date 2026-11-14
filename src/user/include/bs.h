@@ -31,6 +31,25 @@ void console_size(int *cols, int *rows);
 /* Gives the screen back to the text console. */
 void graphics_end(void);
 void sysinfo(struct bs_sysinfo *out);
+
+/* Users. login() switches this process to the account. A password of 0 means
+ * none given, which only root may do; any given password is checked. */
+int login(const char *name, const char *password);
+int whoami(struct bs_user *out);
+int stat(const char *path, struct bs_stat *out);
+int chmod(const char *path, unsigned int perm);
+int chown(const char *path, unsigned int uid, unsigned int gid);
+int set_password(const char *name, const char *old_password, const char *new_password);
+/* /conf/passwd and /conf/group lookups (users.c). 0 on success. */
+int user_by_name(const char *name, struct bs_user *out);
+int user_name(unsigned int uid, char *out, unsigned int size);
+int group_name(unsigned int gid, char *out, unsigned int size);
+int group_by_name(const char *name, unsigned int *gid);
+/* name:... tables (/conf/passwd, group, shadow): add a line, or drop name's line. */
+int table_append(const char *path, const char *line);
+int table_remove(const char *path, const char *name);
+/* Reads a line without echoing it. Returns its length, or -1 on Ctrl+C. */
+int read_secret(const char *prompt, char *out, unsigned int size);
 /* Reads back one row of the text console. Returns its length, or -1. */
 int console_line(int row, char *out, unsigned int size);
 

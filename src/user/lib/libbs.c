@@ -37,6 +37,12 @@ void beep(unsigned int hz, unsigned int ms) { syscall3(SYS_BEEP, (int)hz, (int)m
 void console_clear(void) { syscall3(SYS_CLEAR, 0, 0, 0); }
 void graphics_end(void) { syscall3(SYS_GRAPHICS_END, 0, 0, 0); }
 void sysinfo(struct bs_sysinfo *out) { syscall3(SYS_SYSINFO, (int)out, 0, 0); }
+int login(const char *name, const char *password) { return syscall3(SYS_LOGIN, (int)name, (int)password, 0); }
+int whoami(struct bs_user *out) { return syscall3(SYS_WHOAMI, (int)out, 0, 0); }
+int stat(const char *path, struct bs_stat *out) { return syscall3(SYS_STAT, (int)path, (int)out, 0); }
+int chmod(const char *path, unsigned int perm) { return syscall3(SYS_CHMOD, (int)path, (int)perm, 0); }
+int chown(const char *path, unsigned int uid, unsigned int gid) { return syscall3(SYS_CHOWN, (int)path, (int)uid, (int)gid); }
+int set_password(const char *name, const char *old_password, const char *new_password) { return syscall3(SYS_SETPASS, (int)name, (int)old_password, (int)new_password); }
 int console_line(int row, char *out, unsigned int size) { return syscall3(SYS_CONSOLE_LINE, row, (int)out, (int)size); }
 void poweroff(void) { syscall3(SYS_POWEROFF, 0, 0, 0); }
 void net_info(struct bs_netinfo *out) { syscall3(SYS_NET_INFO, (int)out, 0, 0); }
@@ -225,11 +231,13 @@ void printf(const char *format, ...)
 const char *strerror(int code)
 {
     switch (code < 0 ? -code : code) {
+    case BS_EPERM:   return "not allowed (root only)";
     case BS_ENOENT:  return "no such file or directory";
     case BS_EIO:     return "disk error";
     case BS_ENOEXEC: return "not a valid .BS program";
     case BS_EBADF:   return "bad file descriptor";
     case BS_ENOMEM:  return "out of memory";
+    case BS_EACCES:  return "permission denied";
     case BS_EFAULT:  return "bad address";
     case BS_EEXIST:  return "already exists";
     case BS_ENOTDIR: return "not a directory";

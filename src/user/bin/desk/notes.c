@@ -5,11 +5,19 @@
 #define TEXT_MAX 32768
 #define BAR_H 20
 #define PAD 4
-#define DEFAULT_PATH "/userspace/user/untitled.txt"
+#define DEFAULT_NAME "/untitled.txt"
 
 static char text[TEXT_MAX];
 static int length, caret, top_line, modified;
-static char path[BS_PATH_MAX] = DEFAULT_PATH;
+static char path[BS_PATH_MAX];
+
+/* ~/untitled.txt */
+static void default_path(void)
+{
+    copy_string(path, sizeof(path), desk_home());
+    if (strlen(path) + sizeof(DEFAULT_NAME) < sizeof(path))
+        memcpy(path + strlen(path), DEFAULT_NAME, sizeof(DEFAULT_NAME));
+}
 static char status[48];
 static int visible_lines = 10, visible_columns = 40;
 
@@ -88,6 +96,8 @@ static void save(void)
 
 static void notes_open_request(const char *file)
 {
+    if (!file && !path[0])
+        default_path();
     if (file && (strcmp(file, path) != 0 || !modified))
         load(file);
 }
@@ -213,7 +223,7 @@ static void notes_press(int x, int y, int w, int h)
     }
     if (gfx_inside(x, y, 44, 3, 36, 14)) {
         length = caret = top_line = modified = 0;
-        copy_string(path, sizeof(path), DEFAULT_PATH);
+        default_path();
         copy_string(status, sizeof(status), "new file");
         return;
     }

@@ -1,8 +1,9 @@
-/* Settings: kept in /conf/desk.conf, saved as soon as they change. */
+/* Settings: per user in ~/.desk.conf (defaults in /conf/desk.conf), saved as soon as they change. */
 #include "bs.h"
 #include "desk.h"
 
-#define CONF_PATH "/conf/desk.conf"
+#define SYSTEM_CONF "/conf/desk.conf"
+#define USER_CONF "/.desk.conf"
 #define LEFT 10
 #define CARD_H 34
 #define CARD_GAP 6
@@ -19,6 +20,42 @@ const struct theme *theme = &themes[0];
 static int mouse_speed = 1;
 static char status[48];
 
+const char *desk_home(void)
+{
+    static struct bs_user me;
+
+    if (!me.home[0])
+        whoami(&me);
+    return me.home;
+}
+
+static void user_conf(char *out, unsigned int size)
+{
+    out[0] = 0;
+    if (strlen(desk_home()) + sizeof(USER_CONF) < size) {
+        copy_string(out, size, desk_home());
+        memcpy(out + strlen(out), USER_CONF, sizeof(USER_CONF));
+    }
+}
+
+int desk_conf_get(const char *key, char *out, unsigned int size)
+{
+    char path[BS_PATH_MAX];
+
+    user_conf(path, sizeof(path));
+    if (path[0] && conf_get(path, key, out, size) == 0)
+        return 0;
+    return conf_get(SYSTEM_CONF, key, out, size);
+}
+
+int desk_conf_set(const char *key, const char *value)
+{
+    char path[BS_PATH_MAX];
+
+    user_conf(path, sizeof(path));
+    return path[0] ? conf_set(path, key, value) : -BS_ENAMETOOLONG;
+}
+
 int settings_mouse_speed(void)
 {
     return mouse_speed;
@@ -28,11 +65,11 @@ void settings_load(void)
 {
     char value[16];
 
-    if (conf_get(CONF_PATH, "theme", value, sizeof(value)) == 0)
+    if (desk_conf_get("theme", value, sizeof(value)) == 0)
         for (int i = 0; i < THEME_COUNT; i++)
             if (strcmp(value, themes[i].name) == 0)
                 theme = &themes[i];
-    if (conf_get(CONF_PATH, "mouse_speed", value, sizeof(value)) == 0) {
+    if (desk_conf_get("mouse_speed", value, sizeof(value)) == 0) {
         int speed = atoi(value);
 
         if (speed >= 1 && speed <= 3)
@@ -42,7 +79,7 @@ void settings_load(void)
 
 static void saved(int rc)
 {
-    copy_string(status, sizeof(status), rc < 0 ? strerror(rc) : "saved to /conf/desk.conf");
+    copy_string(status, sizeof(status), rc < 0 ? strerror(rc) : "saved to ~/.desk.conf");
 }
 
 static void settings_draw(int w, int h, int focused)
@@ -88,7 +125,7 @@ static void settings_press(int x, int y, int w, int h)
     for (int i = 0; i < THEME_COUNT; i++) {
         if (gfx_inside(x, y, LEFT, top + i * (CARD_H + CARD_GAP), w - 2 * LEFT, CARD_H)) {
             theme = &themes[i];
-            saved(conf_set(CONF_PATH, "theme", themes[i].name));
+            saved(desk_conf_set("theme", themes[i].name));
             return;
         }
     }
@@ -98,7 +135,7 @@ static void settings_press(int x, int y, int w, int h)
             char value[2] = {(char)('0' + s), 0};
 
             mouse_speed = s;
-            saved(conf_set(CONF_PATH, "mouse_speed", value));
+            saved(desk_conf_set("mouse_speed", value));
             return;
         }
     }

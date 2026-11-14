@@ -16,7 +16,10 @@ Inode 0 is never used and inode 1 is the root directory.
 
 ## Inode (128 bytes)
 `type:u16 perm:u16 links:u32 size:u64 mtime:u64 direct:u32[12] indirect:u32
-double_indirect:u32 reserved:48 bytes`. Types: 1 file, 2 directory, 3 symlink.
+double_indirect:u32 uid:u32 gid:u32 reserved:40 bytes`. Types: 1 file, 2 directory,
+3 symlink. `perm` holds rwx bits for owner, group and others (`0755`); the kernel
+enforces them for everyone but uid 0. uid and gid were reserved bytes before, so
+older images read as owned by root.
 A block pointer of 0 means a hole, which reads as zeroes.
 
 ## Directories

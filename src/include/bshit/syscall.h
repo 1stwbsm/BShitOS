@@ -12,13 +12,16 @@ enum {
     SYS_POWEROFF, SYS_NET_INFO, SYS_DNS, SYS_PING,
     SYS_TCP_OPEN, SYS_TCP_SEND, SYS_TCP_RECEIVE, SYS_TCP_CLOSE,
     SYS_GRAPHICS_END, SYS_SYSINFO, SYS_CONSOLE_LINE,
+    SYS_LOGIN, SYS_WHOAMI, SYS_STAT, SYS_CHMOD, SYS_CHOWN, SYS_SETPASS,
 };
 
 /* Negative syscall results */
+#define BS_EPERM   1
 #define BS_ENOENT  2
 #define BS_EIO     5
 #define BS_ENOEXEC 8
 #define BS_EBADF   9
+#define BS_EACCES  13
 #define BS_ENOMEM  12
 #define BS_EFAULT  14
 #define BS_EEXIST  17
@@ -83,7 +86,26 @@ struct bs_sysinfo {
     uint32_t disk_total_kib, disk_free_kib;     /* the root filesystem */
     uint32_t uptime_seconds;
     uint32_t screen_width, screen_height;
+    uint32_t flags; /* BS_SYSINFO_* */
 };
+
+#define BS_SYSINFO_LIVE 1u /* booted from the live image: nothing is saved */
+
+/* Who the calling process runs as (SYS_WHOAMI). */
+struct bs_user {
+    uint32_t uid, gid;
+    char name[32];
+    char home[BS_PATH_MAX];
+    char shell[BS_PATH_MAX];
+};
+
+/* SYS_STAT; perm is 0755 style. Volumes without owners report root and 0755/0644. */
+struct bs_stat {
+    uint32_t type, size, perm, uid, gid;
+};
+
+#define BS_UID_ROOT 0u
+#define BS_USER_NAME_MAX 32u
 
 struct bs_time {
     uint32_t year, month, day, hour, minute, second; /* UTC */

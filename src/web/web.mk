@@ -24,7 +24,7 @@ $(WEB)/bskern.elf: $(KERNEL_ELF)
 $(WEB)/root.img: $(ROOTFS_FILES) tools/mkbsfs.py
 	@mkdir -p $(dir $@)
 	python3 tools/mkbsfs.py $(ROOTFS) $@ --size $(WEB_ROOT_MIB) \
-		--dir userspace/user --dir bin --dir conf --dir lib --dir mnt \
+		--dir userspace/user --dir root --dir bin --dir conf --dir lib --dir mnt \
 		--symlink boot/efi=esp:/ --symlink mnt/cd=cd:/ --symlink mnt/usb=usb:/
 
 # The full disk image, zipped, for STARTVM.bat to download. Separate from `web`

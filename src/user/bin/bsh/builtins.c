@@ -222,7 +222,8 @@ const struct builtin builtins[] = {
     {"source", "source file [args]", "run a script in this shell (also: .)", source},
     {".", ". file [args]", "same as source", source},
     {"help", "help", "this screen", help},
-    {"exit", "exit [status]", "leave bsh, or end the running script", exit_builtin},
+    {"exit", "exit [status]", "log out, or end the running script", exit_builtin},
+    {"logout", "logout", "same as exit", exit_builtin},
     {0, 0, 0, 0},
 };
 

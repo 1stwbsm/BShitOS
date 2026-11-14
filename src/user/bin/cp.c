@@ -1,3 +1,4 @@
+/* cp from to: copies a file, keeping its mode. */
 #include "bs.h"
 
 int main(int argc, char **argv)
@@ -35,6 +36,12 @@ int main(int argc, char **argv)
     if (got < 0) {
         printf("cp: %s: %s\n", argv[1], strerror(got));
         return 1;
+    }
+    {
+        struct bs_stat st;
+
+        if (stat(argv[1], &st) == 0)
+            chmod(argv[2], st.perm); /* a copied program stays runnable */
     }
     return 0;
 }

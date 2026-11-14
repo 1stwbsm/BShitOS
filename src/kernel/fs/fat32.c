@@ -153,6 +153,7 @@ static int fat_lookup(const struct vnode *dir, const char *name, struct vnode *o
             out->id = (uint32_t)e.cluster_high << 16 | e.cluster_low;
             out->type = e.attr & ATTR_DIR ? BS_TYPE_DIR : BS_TYPE_FILE;
             out->size = e.size;
+            out->owned = 0; /* no owners or permission bits here */
             return 0;
         }
     }

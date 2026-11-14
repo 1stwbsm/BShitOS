@@ -57,6 +57,12 @@ struct proc *proc_current(void)
     return current;
 }
 
+void proc_credentials(uint32_t *uid, uint32_t *gid)
+{
+    *uid = current ? current->user.uid : BS_UID_ROOT;
+    *gid = current ? current->user.gid : 0;
+}
+
 static void map_process(const struct proc *p)
 {
     paging_map_user(0, p->frames[0]);
@@ -159,6 +165,8 @@ int proc_run(const char *path, int argc, char *const *argv)
     if (argc > 32)
         return -BS_EINVAL;
     rc = vfs_open(cwd, path, &node);
+    if (rc == 0)
+        rc = vfs_permit(&node, VFS_EXEC);
     if (rc < 0)
         return rc;
 
@@ -172,6 +180,13 @@ int proc_run(const char *path, int argc, char *const *argv)
     child->used = 1;
     child->parent = parent;
     strlcpy_checked(child->cwd, cwd, BS_PATH_MAX);
+    if (parent) {
+        child->user = parent->user;
+    } else { /* started by the kernel: root */
+        strlcpy_checked(child->user.name, "root", sizeof(child->user.name));
+        strlcpy_checked(child->user.home, "/root", sizeof(child->user.home));
+        strlcpy_checked(child->user.shell, "/bin/bsh.bs", sizeof(child->user.shell));
+    }
     child->frames[0] = free_frames[--free_frame_count];
     child->frames[1] = free_frames[--free_frame_count];
 

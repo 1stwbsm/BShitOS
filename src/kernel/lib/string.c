@@ -55,6 +55,15 @@ int strcmp(const char *a, const char *b)
     return (uint8_t)*a - (uint8_t)*b;
 }
 
+int strncmp(const char *a, const char *b, unsigned int n)
+{
+    for (; n; n--, a++, b++) {
+        if (*a != *b || !*a)
+            return (uint8_t)*a - (uint8_t)*b;
+    }
+    return 0;
+}
+
 int strlcpy_checked(char *dst, const char *src, unsigned int size)
 {
     unsigned int i;

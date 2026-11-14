@@ -12,11 +12,12 @@
 #include "net/net.h"
 #include "proc/proc.h"
 
-#define DEFAULT_SHELL "/bin/bsh.bs"
+#define DEFAULT_SHELL "/bin/login.bs"
 #define CONFIG_VALUE_MAX 64
 
 static char shell_path[BS_PATH_MAX] = DEFAULT_SHELL;
 extern uint32_t boot_seconds;
+extern int system_live;
 
 static void halt(const char *reason)
 {
@@ -93,6 +94,8 @@ static void mount_volumes(const struct bootinfo *info)
     uint64_t lba;
     int live = info->version >= 2 && info->ramdisk_base != 0;
 
+    system_live = live;
+
     if (ahci_init() < 0)
         log_warn("no AHCI storage controller found");
     else
@@ -141,7 +144,7 @@ static void apply_config(void)
     console_set_colors(fg, bg);
     if (kconf_get("serial", value, sizeof(value)) == 0 && strcmp(value, "on") == 0)
         console_set_serial(1);
-    kconf_get("shell", shell_path, sizeof(shell_path));
+    kconf_get("init", shell_path, sizeof(shell_path));
 }
 
 static void start_network(void)
@@ -223,7 +226,7 @@ void kmain(const struct bootinfo *info)
         int code = proc_run(shell_path, 1, shell_argv);
 
         if (code < 0)
-            halt("could not start the shell named in /conf/kernel.conf");
-        console_print("\nbsh exited, restarting it\n");
+            halt("could not start the init= program named in /conf/kernel.conf");
+        console_print("\n");
     }
 }

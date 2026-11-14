@@ -97,6 +97,7 @@ static int iso_lookup(const struct vnode *dir, const char *name, struct vnode *o
             out->id = entry.extent;
             out->type = entry.flags & FLAG_DIRECTORY ? BS_TYPE_DIR : BS_TYPE_FILE;
             out->size = entry.size;
+            out->owned = 0; /* no owners or permission bits here */
             return 0;
         }
     }

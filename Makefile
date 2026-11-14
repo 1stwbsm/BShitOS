@@ -57,7 +57,7 @@ $(BSFS_IMAGE): $(ROOTFS_FILES) tools/mkbsfs.py tools/carryover.py
 	@mkdir -p $(dir $@)
 	python3 tools/carryover.py $(IMAGE) $(CARRY)
 	python3 tools/mkbsfs.py $(ROOTFS) $@ --size $(BSFS_SIZE_MIB) --overlay $(CARRY) \
-		--dir userspace/user --dir bin --dir conf --dir lib --dir mnt \
+		--dir userspace/user --dir root --dir bin --dir conf --dir lib --dir mnt \
 		--symlink boot/efi=esp:/ --symlink mnt/cd=cd:/ --symlink mnt/usb=usb:/
 
 $(IMAGE): $(ESP_FILES) $(BSFS_IMAGE) tools/mkimage.py

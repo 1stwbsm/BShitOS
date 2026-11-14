@@ -98,7 +98,7 @@ static void run_line(const char *command)
         return;
 
     if (strcmp(argv[0], "cd") == 0) {
-        int rc = chdir(argc > 1 ? argv[1] : "/userspace/user");
+        int rc = chdir(argc > 1 ? argv[1] : desk_home());
 
         if (rc < 0)
             add_line(strerror(rc), COLOR_ERROR);

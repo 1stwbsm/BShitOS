@@ -32,13 +32,16 @@ struct bsfs_super {
     uint32_t data_start, root_ino;
 } __attribute__((packed));
 
+/* perm holds rwx bits for owner, group and others (0755 style). uid and gid
+ * used to be reserved bytes, so older images read as owned by root. */
 struct bsfs_inode {
     uint16_t type, perm;
     uint32_t links;
     uint64_t size, mtime;
     uint32_t direct[BSFS_DIRECT];
     uint32_t indirect, double_indirect;
-    uint8_t reserved[48];
+    uint32_t uid, gid;
+    uint8_t reserved[40];
 } __attribute__((packed));
 
 struct bsfs_dirent {

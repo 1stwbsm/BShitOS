@@ -3,7 +3,6 @@
 #include "desk.h"
 
 #define FRAME_MS 15
-#define CONF_PATH "/conf/desk.conf"
 #define LIST_MAX 128
 #define DEFAULT_FULLSCREEN "edit web cube"
 
@@ -60,7 +59,7 @@ int main(void)
     unsigned int buttons = 0;
     struct bs_mouse mouse;
 
-    conf_get(CONF_PATH, "fullscreen", fullscreen_list, sizeof(fullscreen_list));
+    desk_conf_get("fullscreen", fullscreen_list, sizeof(fullscreen_list));
     settings_load();
     mouse_read(&mouse); /* discard motion from before we started */
 

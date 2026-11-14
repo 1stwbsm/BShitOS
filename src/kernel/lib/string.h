@@ -9,6 +9,7 @@ void *memmove(void *dst, const void *src, unsigned int n);
 int memcmp(const void *a, const void *b, unsigned int n);
 unsigned int strlen(const char *s);
 int strcmp(const char *a, const char *b);
+int strncmp(const char *a, const char *b, unsigned int n);
 /* Always NUL-terminates; returns -1 if src did not fit. */
 int strlcpy_checked(char *dst, const char *src, unsigned int size);
 
