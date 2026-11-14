@@ -25,6 +25,12 @@ make                  # just build the disk image
 
 Files in `/userspace` carry over when you rebuild the disk image.
 
+### Windows
+
+Run `STARTVM.bat`. It uses the QEMU bundled in `tools/qemu-windows`, so you don't
+need to install anything. On the first run it downloads the latest disk image that
+CI built. `STARTVM.bat --update` replaces it later, which wipes `/userspace`.
+
 ## The web version
 
 `src/emu` is BShitEmu, an i686 PC emulator written in C and compiled to WebAssembly.
@@ -40,3 +46,9 @@ cd out/web && python3 -m http.server 8000
 
 GitHub Pages is rebuilt from `main` by `.github/workflows/pages.yml`.
 In the browser, changes are lost when you close the page.
+
+## License
+
+BShitOS is free software under the GNU General Public License v3.0; see
+[LICENSE](LICENSE). The bundled QEMU in `tools/qemu-windows` keeps its own licenses;
+see its [README](tools/qemu-windows/README.txt).
