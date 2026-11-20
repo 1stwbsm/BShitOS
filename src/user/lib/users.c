@@ -134,8 +134,14 @@ int read_secret(const char *prompt, char *out, unsigned int size)
     unsigned int length = 0;
 
     printf("%s", prompt);
-    for (;;) {
+    for (unsigned int idle = 1;; idle++) {
         int key = poll_key();
+
+        if (!key && (idle & 63) == 0 && shutting_down()) {
+            memset(out, 0, size);
+            printf("\n");
+            return -1;
+        }
 
         if (key == '\n') {
             out[length] = 0;

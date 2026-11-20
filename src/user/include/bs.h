@@ -23,7 +23,6 @@ void mouse_read(struct bs_mouse *out);
 void get_time(struct bs_time *out);
 void beep(unsigned int hz, unsigned int ms);
 void console_clear(void);
-void reboot(void) __attribute__((noreturn));
 /* Draws the spinning cube into a width x height 0xRRGGBB buffer. */
 void cube_render(unsigned int *pixels, int width, int height, int angle_x, int angle_y, int angle_z);
 int atoi(const char *s);
@@ -58,7 +57,10 @@ int read_secret(const char *prompt, char *out, unsigned int size);
 /* Reads back one row of the text console. Returns its length, or -1. */
 int console_line(int row, char *out, unsigned int size);
 
-void poweroff(void); /* returns only on failure */
+/* Asks every program to exit, then powers off or restarts (BS_SHUTDOWN_*). It
+ * returns: exit soon after. Long-running programs should poll shutting_down(). */
+int shutdown(int mode);
+int shutting_down(void);
 void net_info(struct bs_netinfo *out);
 int dns_lookup(const char *host, unsigned int *ip); /* also accepts a dotted address */
 int ping(unsigned int ip, unsigned int timeout_ms); /* returns milliseconds */

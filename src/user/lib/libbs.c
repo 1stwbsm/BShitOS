@@ -48,7 +48,15 @@ int disk_info(struct bs_disk_info *out) { return syscall3(SYS_DISK_INFO, (int)ou
 int disk_read(const struct bs_disk_io *io) { return syscall3(SYS_DISK_READ, (int)io, 0, 0); }
 int disk_write(const struct bs_disk_io *io) { return syscall3(SYS_DISK_WRITE, (int)io, 0, 0); }
 int console_line(int row, char *out, unsigned int size) { return syscall3(SYS_CONSOLE_LINE, row, (int)out, (int)size); }
-void poweroff(void) { syscall3(SYS_POWEROFF, 0, 0, 0); }
+int shutdown(int mode) { return syscall3(SYS_SHUTDOWN, mode, 0, 0); }
+
+int shutting_down(void)
+{
+    struct bs_sysinfo info;
+
+    sysinfo(&info);
+    return (info.flags & BS_SYSINFO_SHUTDOWN) != 0;
+}
 void net_info(struct bs_netinfo *out) { syscall3(SYS_NET_INFO, (int)out, 0, 0); }
 int ping(unsigned int ip, unsigned int timeout_ms) { return syscall3(SYS_PING, (int)ip, (int)timeout_ms, 0); }
 int tcp_open(unsigned int ip, unsigned int port) { return syscall3(SYS_TCP_OPEN, (int)ip, (int)port, 0); }
@@ -88,12 +96,6 @@ void console_size(int *cols, int *rows)
     *rows = packed & 0xFFFF;
 }
 
-void reboot(void)
-{
-    syscall3(SYS_REBOOT, 0, 0, 0);
-    for (;;)
-        ;
-}
 
 int atoi(const char *s)
 {

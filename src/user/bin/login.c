@@ -15,8 +15,11 @@ static int read_name(char *out, unsigned int size)
     unsigned int length = 0;
 
     printf("\033[93mbshitos\033[0m login: ");
-    for (;;) {
+    for (unsigned int idle = 1;; idle++) {
         int key = poll_key();
+
+        if (!key && (idle & 63) == 0 && shutting_down())
+            return -1;
 
         if (key == '\n') {
             out[length] = 0;
@@ -65,7 +68,7 @@ int main(void)
         return start_session();
     }
 
-    for (;;) {
+    while (!shutting_down()) {
         int rc;
 
         if (read_name(name, sizeof(name)) <= 0)
@@ -82,4 +85,5 @@ int main(void)
         if (++failures % TRIES_BEFORE_PAUSE == 0)
             sleep_ms(3000); /* the kernel already waits a second per try */
     }
+    return 0; /* shutting down */
 }

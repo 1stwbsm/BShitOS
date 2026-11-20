@@ -189,6 +189,6 @@ int main(void)
     printf("\n%u files installed. log in as %s.\n", files, accounts.name);
     printf("power off, take the CD out, and boot from the disk. reboot now? [y/N] ");
     if (ask("", answer, sizeof(answer)) > 0 && (answer[0] == 'y' || answer[0] == 'Y'))
-        reboot();
+        shutdown(BS_SHUTDOWN_REBOOT);
     return 0;
 }

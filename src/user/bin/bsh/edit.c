@@ -269,12 +269,16 @@ static void set_line(const char *s, unsigned int n)
     len = pos = n;
 }
 
+#define KEY_SHUTDOWN (-1)
+
+/* Waits for a key; gives up if a shutdown starts (checked now and then: it costs a syscall). */
 static int next_key(void)
 {
     int key;
 
-    while (!(key = poll_key()))
-        ;
+    for (unsigned int idle = 1; !(key = poll_key()); idle++)
+        if ((idle & 63) == 0 && shutting_down())
+            return KEY_SHUTDOWN;
     return key;
 }
 
@@ -514,6 +518,10 @@ int edit_line(const char *prompt_text, char *out, unsigned int out_size)
         int key = next_key(), still_browsing = 0, i;
 
         switch (key) {
+        case KEY_SHUTDOWN:
+            put("\n");
+            buf[0] = 0;
+            return -1;
         case '\n':
             return finish();
         case CTRL('c'):

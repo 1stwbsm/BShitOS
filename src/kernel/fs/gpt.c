@@ -1,4 +1,4 @@
-#include "drivers/ahci.h"
+#include "drivers/block.h"
 #include "fs/partitions.h"
 #include "lib/string.h"
 
@@ -23,10 +23,10 @@ static const uint8_t bsfs_type[16] = {
 
 static int find(const uint8_t *type, uint64_t *lba)
 {
-    uint8_t sector[AHCI_SECTOR_SIZE] __attribute__((aligned(16)));
+    uint8_t sector[BLOCK_SECTOR_SIZE] __attribute__((aligned(16)));
     struct gpt_header header;
 
-    if (ahci_read(HEADER_LBA, 1, sector) < 0)
+    if (block_read(HEADER_LBA, 1, sector) < 0)
         return -1;
     memcpy(&header, sector, sizeof(header));
     if (memcmp(header.signature, "EFI PART", 8) != 0 || header.entry_size == 0 ||
@@ -36,9 +36,9 @@ static int find(const uint8_t *type, uint64_t *lba)
     for (uint32_t i = 0; i < header.entry_count; i++) {
         uint32_t offset = i * header.entry_size;
 
-        if (ahci_read(header.entries_lba + offset / AHCI_SECTOR_SIZE, 1, sector) < 0)
+        if (block_read(header.entries_lba + offset / BLOCK_SECTOR_SIZE, 1, sector) < 0)
             return -1;
-        offset %= AHCI_SECTOR_SIZE;
+        offset %= BLOCK_SECTOR_SIZE;
         if (memcmp(sector + offset, type, 16) == 0) {
             memcpy(lba, sector + offset + 32, sizeof(*lba));
             return 0;

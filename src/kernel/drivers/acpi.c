@@ -2,6 +2,7 @@
 #include "drivers/acpi.h"
 #include "drivers/console.h"
 #include "lib/string.h"
+#include "proc/shutdown.h"
 
 #define PWRBTN (1u << 8)
 #define SCI_EN 1u
@@ -133,9 +134,12 @@ void acpi_poll(void)
 {
     if (event_port && (inw(event_port) & PWRBTN)) {
         outw(event_port, PWRBTN);
-        console_graphics_end();
-        console_print("\npower button pressed, shutting down\n");
-        acpi_poweroff();
+        if (shutdown_pending()) { /* pressed again: no more waiting */
+            console_graphics_end();
+            console_print("\npower button pressed twice, powering off now\n");
+            acpi_poweroff();
+        }
+        shutdown_request(BS_SHUTDOWN_POWEROFF);
     }
 }
 

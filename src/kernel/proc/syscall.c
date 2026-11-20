@@ -1,5 +1,5 @@
 #include "drivers/acpi.h"
-#include "drivers/ahci.h"
+#include "drivers/block.h"
 #include "drivers/console.h"
 #include "drivers/fb.h"
 #include "fs/partitions.h"
@@ -10,6 +10,7 @@
 #include "net/net.h"
 #include "proc/proc.h"
 #include "proc/users.h"
+#include "proc/shutdown.h"
 
 #define FB_BLIT_MAX 2048u
 
@@ -234,7 +235,7 @@ static int sys_sysinfo(uint32_t out)
     bsfs_usage(&info->disk_total_kib, &info->disk_free_kib);
     info->uptime_seconds = rtc_seconds() - boot_seconds;
     fb_resolution(&info->screen_width, &info->screen_height);
-    info->flags = system_live ? BS_SYSINFO_LIVE : 0;
+    info->flags = (system_live ? BS_SYSINFO_LIVE : 0) | (shutdown_pending() ? BS_SYSINFO_SHUTDOWN : 0);
     return 0;
 }
 
@@ -329,7 +330,7 @@ static int sys_disk_info(uint32_t out)
     if (!user_range_ok(out, sizeof(*info)))
         return -BS_EFAULT;
     memset(info, 0, sizeof(*info));
-    if (!ahci_has_disk() || ahci_identify(&sectors, info->model, sizeof(info->model)) < 0)
+    if (!block_present() || block_identify(&sectors, info->model, sizeof(info->model)) < 0)
         return 0;
     info->present = 1;
     info->in_use = !system_live;
@@ -355,16 +356,16 @@ static int sys_disk_io(uint32_t request, int write)
     bytes = io.sectors * BS_DISK_SECTOR;
     if (io.sectors == 0 || io.sectors > BS_DISK_IO_MAX || !user_range_ok(io.buffer, bytes))
         return -BS_EINVAL;
-    if (!ahci_has_disk())
+    if (!block_present())
         return -BS_ENOENT;
     if (write && !system_live)
         return -BS_EPERM; /* the running system lives on this disk */
     lba = (uint64_t)io.lba_high << 32 | io.lba_low;
     if (write) {
         memcpy(bounce, (const void *)io.buffer, bytes);
-        return ahci_write(lba, io.sectors, bounce) < 0 ? -BS_EIO : 0;
+        return block_write(lba, io.sectors, bounce) < 0 ? -BS_EIO : 0;
     }
-    if (ahci_read(lba, io.sectors, bounce) < 0)
+    if (block_read(lba, io.sectors, bounce) < 0)
         return -BS_EIO;
     memcpy((void *)io.buffer, bounce, bytes);
     return 0;
@@ -395,6 +396,8 @@ static int sys_spawn(uint32_t path_ptr, int argc, uint32_t argv_ptr)
 
 int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c)
 {
+    if (number != SYS_EXIT)
+        shutdown_check();
     switch (number) {
     case SYS_EXIT:    proc_exit((int)a);
     case SYS_READ:    return sys_read((int)a, b, c);
@@ -415,9 +418,10 @@ int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c)
     case SYS_TIME:    return sys_time(a);
     case SYS_BEEP:    pit_beep(a, b); return 0;
     case SYS_CLEAR:   console_clear(); return 0;
-    case SYS_REBOOT:  reboot_machine();
+    case SYS_REBOOT:  shutdown_request(BS_SHUTDOWN_REBOOT); return 0;
     case SYS_CONSOLE_SIZE: return (int)console_size();
-    case SYS_POWEROFF: acpi_poweroff(); return -BS_EINVAL;
+    case SYS_POWEROFF: shutdown_request(BS_SHUTDOWN_POWEROFF); return 0;
+    case SYS_SHUTDOWN: shutdown_request((int)a); return shutdown_pending() ? 0 : -BS_EINVAL;
     case SYS_NET_INFO: return sys_net_info(a);
     case SYS_DNS:     return sys_dns(a, b);
     case SYS_PING:    return net_configured() ? net_ping(a, b) : -BS_ENETDOWN;

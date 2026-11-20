@@ -24,6 +24,7 @@ struct proc {
     struct file files[PROC_MAX_FILES];
     struct proc *parent;
     struct bs_user user; /* who it runs as; children inherit it */
+    char name[16];       /* the program's file name, for messages */
 };
 
 void proc_init(const struct bootinfo *info);

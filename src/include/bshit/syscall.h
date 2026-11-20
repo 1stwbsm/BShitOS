@@ -14,6 +14,7 @@ enum {
     SYS_GRAPHICS_END, SYS_SYSINFO, SYS_CONSOLE_LINE,
     SYS_LOGIN, SYS_WHOAMI, SYS_STAT, SYS_CHMOD, SYS_CHOWN, SYS_SETPASS,
     SYS_READLINK, SYS_DISK_INFO, SYS_DISK_READ, SYS_DISK_WRITE,
+    SYS_SHUTDOWN,
 };
 
 /* Negative syscall results */
@@ -91,6 +92,13 @@ struct bs_sysinfo {
 };
 
 #define BS_SYSINFO_LIVE 1u /* booted from the live image: nothing is saved */
+#define BS_SYSINFO_SHUTDOWN 2u /* a shutdown is under way: finish up and exit */
+
+/* SYS_SHUTDOWN modes. Every program is asked to exit first; see proc/shutdown.c. */
+#define BS_SHUTDOWN_POWEROFF 1
+#define BS_SHUTDOWN_REBOOT 2
+/* The exit code of a program stopped for not exiting before a shutdown deadline. */
+#define BS_EXIT_STOPPED 143
 
 /* Who the calling process runs as (SYS_WHOAMI). */
 struct bs_user {

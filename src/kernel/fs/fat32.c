@@ -1,10 +1,10 @@
 /* Read-only FAT32 backend, for the boot partition and USB drives. 8.3 names only. */
-#include "drivers/ahci.h"
+#include "drivers/block.h"
 #include "fs/partitions.h"
 #include "fs/vfs.h"
 #include "lib/string.h"
 
-#define SECTOR AHCI_SECTOR_SIZE
+#define SECTOR BLOCK_SECTOR_SIZE
 #define MAX_VOLUMES 2
 #define ENTRY_SIZE 32u
 #define ATTR_VOLUME 0x08
@@ -222,7 +222,7 @@ int fat32_mount_device(const char *name, fat32_read_fn read, uint64_t lba)
 
 int fat32_mount_volume(const char *name, uint64_t lba)
 {
-    return fat32_mount_device(name, ahci_read, lba);
+    return fat32_mount_device(name, block_read, lba);
 }
 
 /* Finds a FAT32 filesystem on a whole disk: bare, MBR or first GPT partition. */

@@ -1,12 +1,12 @@
 /* BSFS VFS backend. Reads use the shared core; every write goes straight to disk. */
 #include <bshit/bsfs.h>
 
-#include "drivers/ahci.h"
+#include "drivers/block.h"
 #include "fs/partitions.h"
 #include "fs/vfs.h"
 #include "lib/string.h"
 
-#define SECTORS_PER_BLOCK (BSFS_BLOCK_SIZE / AHCI_SECTOR_SIZE)
+#define SECTORS_PER_BLOCK (BSFS_BLOCK_SIZE / BLOCK_SECTOR_SIZE)
 #define BLOCK_BUF(name) uint8_t name[BSFS_BLOCK_SIZE] __attribute__((aligned(16)))
 
 static uint64_t partition_lba;
@@ -24,7 +24,7 @@ static int disk_read(void *ctx, uint32_t block, void *buf)
         memcpy(buf, ram_base + block * BSFS_BLOCK_SIZE, BSFS_BLOCK_SIZE);
         return 0;
     }
-    return ahci_read(partition_lba + (uint64_t)block * SECTORS_PER_BLOCK, SECTORS_PER_BLOCK, buf);
+    return block_read(partition_lba + (uint64_t)block * SECTORS_PER_BLOCK, SECTORS_PER_BLOCK, buf);
 }
 
 static int disk_write(void *ctx, uint32_t block, const void *buf)
@@ -36,7 +36,7 @@ static int disk_write(void *ctx, uint32_t block, const void *buf)
         memcpy(ram_base + block * BSFS_BLOCK_SIZE, buf, BSFS_BLOCK_SIZE);
         return 0;
     }
-    return ahci_write(partition_lba + (uint64_t)block * SECTORS_PER_BLOCK, SECTORS_PER_BLOCK, buf);
+    return block_write(partition_lba + (uint64_t)block * SECTORS_PER_BLOCK, SECTORS_PER_BLOCK, buf);
 }
 
 static int write_inode(uint32_t ino, const struct bsfs_inode *in)

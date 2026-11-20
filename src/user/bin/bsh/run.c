@@ -427,7 +427,7 @@ int run_line(const char *line)
     if (depth >= DEPTH_MAX)
         return bsh_error("script", "nested too deep"), 2;
     c = &line_commands[depth++];
-    while (op != OP_END && !exit_flag) {
+    while (op != OP_END && !exit_flag && !shutting_down()) {
         int run = op == OP_SEQ || (op == OP_AND && last_status == 0) || (op == OP_OR && last_status != 0);
         int next = parse(&p, c);
 
@@ -466,7 +466,7 @@ int run_script(const char *path, int argc, char **argv)
 
     set_positional(argc, argv);
     last_status = 0;
-    for (line = text; line && *line && !exit_flag;) {
+    for (line = text; line && *line && !exit_flag && !shutting_down();) {
         char *end = strchr(line, '\n');
 
         if (end)

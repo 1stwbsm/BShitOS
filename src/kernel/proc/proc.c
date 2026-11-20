@@ -8,6 +8,7 @@
 #include "lib/string.h"
 #include "net/net.h"
 #include "proc/proc.h"
+#include "proc/shutdown.h"
 
 #define MAX_PROCS 6
 #define MAX_FRAMES 256
@@ -180,6 +181,14 @@ int proc_run(const char *path, int argc, char *const *argv)
     child->used = 1;
     child->parent = parent;
     strlcpy_checked(child->cwd, cwd, BS_PATH_MAX);
+    {
+        const char *base = path;
+
+        for (const char *p = path; *p; p++)
+            if (*p == '/')
+                base = p + 1;
+        strlcpy_checked(child->name, base, sizeof(child->name)); /* truncated is fine */
+    }
     if (parent) {
         child->user = parent->user;
     } else { /* started by the kernel: root */
@@ -203,6 +212,11 @@ int proc_run(const char *path, int argc, char *const *argv)
         current = child;
         rc = enter_user(header.entry, sp, &child->ksp);
         current = parent;
+        if (shutdown_pending()) {
+            console_print("[\033[92m ok \033[0m] ");
+            console_print(child->name);
+            console_print(rc == BS_EXIT_STOPPED ? " stopped\n" : " exited\n");
+        }
         tcp_close_owned(child);
         console_graphics_end();
     }

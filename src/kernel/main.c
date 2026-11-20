@@ -4,6 +4,8 @@
 #include "conf.h"
 #include "drivers/acpi.h"
 #include "drivers/ahci.h"
+#include "drivers/block.h"
+#include "proc/shutdown.h"
 #include "drivers/console.h"
 #include "drivers/rtc.h"
 #include "drivers/xhci.h"
@@ -100,8 +102,11 @@ static void mount_volumes(const struct bootinfo *info)
         log_warn("no AHCI storage controller found");
     else
         log_ok("AHCI storage controller started");
-    if (ahci_has_disk())
-        log_ok("SATA disk found");
+    if (block_init() == 0) {
+        console_print("[\033[92m ok \033[0m] ");
+        console_print(block_kind());
+        console_print(" disk found\n");
+    }
     if (ahci_has_cd())
         log_ok("CD/DVD drive found");
 
@@ -113,7 +118,7 @@ static void mount_volumes(const struct bootinfo *info)
         log_ok("root filesystem mounted from the live image in memory");
         log_warn("running live: changes will not be saved");
     } else {
-        if (!ahci_has_disk())
+        if (!block_present())
             halt("no disk found");
         if (gpt_find_bsfs(&lba) < 0)
             halt("no BSFS partition found");
@@ -225,6 +230,8 @@ void kmain(const struct bootinfo *info)
     for (;;) {
         int code = proc_run(shell_path, 1, shell_argv);
 
+        if (shutdown_pending())
+            shutdown_finish();
         if (code < 0)
             halt("could not start the init= program named in /conf/kernel.conf");
         console_print("\n");

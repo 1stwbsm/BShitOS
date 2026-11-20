@@ -7,6 +7,7 @@
 #include "drivers/serial.h"
 #include "lib/string.h"
 #include "net/net.h"
+#include "proc/shutdown.h"
 
 #define MAX_COLS 320
 #define MAX_ROWS 120
@@ -429,6 +430,8 @@ static uint8_t next_key(void)
 {
     for (;;) {
         uint8_t c = console_poll_key();
+
+        shutdown_check(); /* a program waiting here must not hold up a shutdown */
 
         if (c)
             return c;

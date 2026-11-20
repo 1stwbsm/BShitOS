@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     last_status = 0;
     history_load();
 
-    while (!exit_requested()) {
+    while (!exit_requested() && !shutting_down()) {
         unsigned int started;
         int changed;
 

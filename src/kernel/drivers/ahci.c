@@ -229,6 +229,11 @@ int ahci_write(uint64_t lba, uint32_t sectors, const void *buf)
 {
     if (ata_command(ATA_WRITE_DMA_EXT, lba, sectors, (void *)buf, 1) < 0)
         return -1;
+    return ahci_flush();
+}
+
+int ahci_flush(void)
+{
     return ata_command(ATA_FLUSH_CACHE_EXT, 0, 0, 0, 0);
 }
 
