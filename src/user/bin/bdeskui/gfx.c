@@ -1,7 +1,7 @@
 /*
  * Drawing. Everything lands in a frame of screen_w x screen_h layout pixels
- * that the kernel scales onto the screen. The look: gel and glass shading for
- * depth, held in by 2 px outlines and hard, unblurred shadows.
+ * that the kernel scales onto the screen. Skins decide what things look like;
+ * these are the primitives they use.
  */
 #include <bshit/font5x7.h>
 
@@ -10,12 +10,17 @@
 /* Sized for the biggest layout; pages beyond the one in use are never touched,
  * so they take no memory. */
 static unsigned int frame[MAX_W * MAX_H];
-static unsigned int wallpaper[MAX_W * MAX_H];
 int screen_w = MIN_W, screen_h = MIN_H;
 static int origin_x, origin_y, clip_left, clip_top, clip_right = MIN_W, clip_bottom = MIN_H;
+static int real_w, real_h; /* the screen in real pixels */
 
 void gfx_init(int width, int height)
 {
+    struct bs_sysinfo info;
+
+    sysinfo(&info);
+    real_w = (int)info.screen_width;
+    real_h = (int)info.screen_height;
     screen_w = width;
     screen_h = height;
     gfx_unclip();
@@ -43,6 +48,12 @@ void gfx_clip(int x, int y, int w, int h)
 void gfx_unclip(void)
 {
     gfx_clip(0, 0, SCREEN_W, SCREEN_H);
+}
+
+void gfx_origin(int *x, int *y)
+{
+    *x = origin_x;
+    *y = origin_y;
 }
 
 /* Absolute-coordinate span clipped to the current clip; returns 0 if empty. */
@@ -76,6 +87,12 @@ void gfx_fill(int x, int y, int w, int h, unsigned int color)
             frame[row * SCREEN_W + column] = color;
 }
 
+void gfx_background(void)
+{
+    gfx_unclip();
+    gfx_fill(0, 0, SCREEN_W, SCREEN_H, skin->background);
+}
+
 void gfx_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bottom)
 {
     for (int row = 0; row < h; row++)
@@ -103,8 +120,12 @@ void gfx_gel(int x, int y, int w, int h, unsigned int base, int pressed)
 
 void gfx_chrome(int x, int y, int w, int h, unsigned int base, int pressed)
 {
-    int upper = h * 9 / 20, g = theme->gloss;
+    int upper = h * 9 / 20, g = skin->gloss;
 
+    if (g == 0) { /* flat skins */
+        gfx_fill(x, y, w, h, pressed ? DARKER(base, 40) : base);
+        return;
+    }
     if (pressed) {
         gfx_gradient(x, y, w, h, DARKER(base, 60), LIGHTER(base, g / 3));
         return;
@@ -114,30 +135,14 @@ void gfx_chrome(int x, int y, int w, int h, unsigned int base, int pressed)
     gfx_fill(x + 1, y + 1, w - 2, 1, LIGHTER(base, g + 40 > 256 ? 256 : g + 40)); /* the specular line */
 }
 
-void gfx_glass(int x, int y, int w, int h, unsigned int top, unsigned int bottom)
-{
-    gfx_gradient(x, y, w, h, top, bottom);
-    gfx_fill(x, y, w, 1, LIGHTER(top, 150));
-    gfx_gradient(x, y + 1, w, h / 2, LIGHTER(top, 50), top);
-}
-
-void gfx_bevel(int x, int y, int w, int h, int raised)
-{
-    unsigned int light = raised ? 0xFFFFFF : 0x7A8A94, dark = raised ? 0x7A8A94 : 0xFFFFFF;
-
-    gfx_fill(x, y, w, 1, light);
-    gfx_fill(x, y, 1, h, light);
-    gfx_fill(x, y + h - 1, w, 1, dark);
-    gfx_fill(x + w - 1, y, 1, h, dark);
-}
-
 void gfx_inset(int x, int y, int w, int h, unsigned int fill)
 {
     gfx_fill(x, y, w, h, fill);
-    gfx_fill(x, y, w, 2, DARKER(fill, 90));
-    gfx_fill(x, y, 2, h, DARKER(fill, 60));
-    gfx_fill(x, y + h - 1, w, 1, LIGHTER(fill, 120));
-    gfx_outline(x - 1, y - 1, w + 2, h + 2, theme->line);
+    if (skin->gloss) {
+        gfx_fill(x, y, w, 2, DARKER(fill, 60));
+        gfx_fill(x, y, 2, h, DARKER(fill, 40));
+    }
+    gfx_outline(x - 1, y - 1, w + 2, h + 2, skin->line);
 }
 
 void gfx_outline(int x, int y, int w, int h, unsigned int color)
@@ -150,11 +155,11 @@ void gfx_outline(int x, int y, int w, int h, unsigned int color)
 
 void gfx_frame(int x, int y, int w, int h)
 {
-    gfx_outline(x, y, w, h, theme->line);
-    gfx_outline(x + 1, y + 1, w - 2, h - 2, theme->line);
+    gfx_outline(x, y, w, h, skin->line);
+    gfx_outline(x + 1, y + 1, w - 2, h - 2, skin->line);
 }
 
-/* Bresenham, stamped thickness x thickness: the V, ^ and X of the title bars. */
+/* Bresenham, stamped thickness x thickness. */
 void gfx_line(int x0, int y0, int x1, int y1, int thickness, unsigned int color)
 {
     int dx = x1 > x0 ? x1 - x0 : x0 - x1, dy = y1 > y0 ? y0 - y1 : y1 - y0;
@@ -175,6 +180,14 @@ void gfx_line(int x0, int y0, int x1, int y1, int thickness, unsigned int color)
     }
 }
 
+void gfx_disc(int cx, int cy, int r, unsigned int color)
+{
+    for (int y = -r; y <= r; y++)
+        for (int x = -r; x <= r; x++)
+            if (x * x + y * y <= r * r - r / 2)
+                gfx_fill(cx + x, cy + y, 1, 1, color);
+}
+
 void gfx_darken(int x, int y, int w, int h, int amount)
 {
     int left = x + origin_x, top = y + origin_y, right = left + w, bottom = top + h;
@@ -183,18 +196,20 @@ void gfx_darken(int x, int y, int w, int h, int amount)
         return;
     for (int row = top; row < bottom; row++)
         for (int column = left; column < right; column++)
-            frame[row * SCREEN_W + column] = mix(frame[row * SCREEN_W + column], 0x001018, amount);
+            frame[row * SCREEN_W + column] = mix(frame[row * SCREEN_W + column], 0x000000, amount);
 }
 
-void gfx_shadow(int x, int y, int w, int h)
+void gfx_shadow(int x, int y, int w, int h, int offset, int amount)
 {
-    gfx_darken(x + 5, y + h, w, 5, 150);
-    gfx_darken(x + w, y + 5, 5, h - 5, 150);
+    if (offset <= 0)
+        return;
+    gfx_darken(x + offset, y + h, w, offset, amount);
+    gfx_darken(x + w, y + offset, offset, h - offset, amount);
 }
 
 void gfx_slab(int x, int y, int w, int h, unsigned int base, int pressed)
 {
-    unsigned int line = theme->line;
+    unsigned int line = skin->line;
 
     gfx_gel(x + 1, y + 1, w - 2, h - 2, base, pressed);
     /* The frame skips the corner pixels, and the cut closes diagonally inside. */
@@ -256,17 +271,14 @@ void gfx_text_scaled(int x, int y, const char *s, int scale, unsigned int color)
         glyph(x, y, *s, scale, color);
 }
 
-/* ---- Controls ---------------------------------------------------------------- */
+/* ---- Controls: the skin's ------------------------------------------------------ */
 
 void gfx_button(int x, int y, int w, int h, const char *label, int highlighted)
 {
-    unsigned int base = highlighted ? theme->select : theme->button;
-
-    gfx_slab(x, y, w, h, base, 0);
-    gfx_text(x + (w - (int)strlen(label) * CHAR_W) / 2, y + (h - 7) / 2, label, theme->text);
+    skin->draw_button(x, y, w, h, label, highlighted);
 }
 
-/* A liquid tube: a recessed well with gel filling it up. */
+/* A tube filling up. */
 void gfx_bar(int x, int y, int w, int h, unsigned int used, unsigned int total, unsigned int color)
 {
     int filled;
@@ -276,9 +288,13 @@ void gfx_bar(int x, int y, int w, int h, unsigned int used, unsigned int total, 
         used >>= 1;
     }
     filled = total ? (int)(used * (unsigned int)(w - 2) / total) : 0;
-    gfx_inset(x, y, w, h, theme->field);
-    if (filled > 0)
-        gfx_gel(x + 1, y + 1, filled, h - 2, color, 0);
+    gfx_inset(x, y, w, h, skin->field);
+    if (filled > 0) {
+        if (skin->gloss)
+            gfx_gel(x + 1, y + 1, filled, h - 2, color, 0);
+        else
+            gfx_fill(x + 1, y + 1, filled, h - 2, color);
+    }
 }
 
 int gfx_inside(int px, int py, int x, int y, int w, int h)
@@ -286,7 +302,7 @@ int gfx_inside(int px, int py, int x, int y, int w, int h)
     return px >= x && py >= y && px < x + w && py < y + h;
 }
 
-/* ---- Icons: 16x16 maps. Shading gets a gloss over the top rows. --------------- */
+/* ---- Icons: 16x16 maps, drawn in the skin's icon style -------------------------- */
 
 static const char *const icon_maps[ICON_COUNT][16] = {
     [ICON_TERMINAL] = {
@@ -355,11 +371,40 @@ static const char *const icon_maps[ICON_COUNT][16] = {
         "KRRWRRRRRRRRWRRK", "KRRRWRRRRRRWRRRK", ".KRRRWWWWWWRRRK.", ".KRRRRRRRRRRRRK.",
         "..KRRRRRRRRRRK..", "...KKRRRRRRKK...", ".....KKKKKK.....", "................",
     },
+    [ICON_USER] = {
+        "................", "......KKKK......", ".....KSSSSK.....", "....KSSSSSSK....",
+        "....KSSSSSSK....", "....KSSSSSSK....", ".....KSSSSK.....", "......KKKK......",
+        "....KKBBBBKK....", "...KBBBBBBBBK...", "..KBBBBBBBBBBK..", "..KBBBBBBBBBBK..",
+        "..KBBBBBBBBBBK..", "..KKKKKKKKKKKK..", "................", "................",
+    },
 };
 
 static const unsigned int icon_accents[ICON_COUNT] = {
     [ICON_CUBE] = 0x8E5BD8, [ICON_PROGRAM] = 0x2F86D8,
 };
+
+static const unsigned int vga[16] = {
+    0x000000, 0x0000AA, 0x00AA00, 0x00AAAA, 0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
+    0x555555, 0x5555FF, 0x55FF55, 0x55FFFF, 0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF,
+};
+
+static unsigned int nearest_vga(unsigned int c)
+{
+    unsigned int best = 0, best_distance = ~0u;
+
+    for (int i = 0; i < 16; i++) {
+        int dr = (int)((c >> 16) & 255) - (int)((vga[i] >> 16) & 255);
+        int dg = (int)((c >> 8) & 255) - (int)((vga[i] >> 8) & 255);
+        int db = (int)(c & 255) - (int)(vga[i] & 255);
+        unsigned int d = (unsigned int)(dr * dr + dg * dg + db * db);
+
+        if (d < best_distance) {
+            best_distance = d;
+            best = vga[i];
+        }
+    }
+    return best;
+}
 
 static int icon_color(char c, unsigned int accent, unsigned int *out)
 {
@@ -382,6 +427,39 @@ static int icon_color(char c, unsigned int accent, unsigned int *out)
     }
 }
 
+/* Recolours one icon pixel for the skin's style; 0 leaves it out. */
+static int styled(char c, int row, unsigned int color, unsigned int *out)
+{
+    switch (skin->icons) {
+    case ICONS_LINE: /* light lines; fills only as a faint tint, warm colours as the accent */
+        if (c == 'K')
+            *out = skin->chrome_text;
+        else if (c == 'W' || c == 'w' || c == 'S')
+            return 0;
+        else if (c == 'Y' || c == 'O' || c == 'R')
+            *out = mix(skin->accent, skin->background, 60);
+        else
+            *out = mix(color, skin->background, 150);
+        return 1;
+    case ICONS_EGA:
+        *out = nearest_vga(color);
+        return 1;
+    case ICONS_PICTO: /* black, white, and the accent for anything warm */
+        if (c == 'W' || c == 'w' || c == 'S')
+            *out = 0xFFFFFF;
+        else if (c == 'Y' || c == 'O' || c == 'R' || c == 'A' || c == 'L')
+            *out = skin->accent;
+        else if (c == 'g')
+            *out = 0x8A8A8A;
+        else
+            *out = 0x111111;
+        return 1;
+    default: /* glossy: a sheen, strongest at the top */
+        *out = c != 'K' && row < 7 ? LIGHTER(color, 70 - row * 9) : color;
+        return 1;
+    }
+}
+
 void gfx_icon(int x, int y, enum icon which, int scale)
 {
     const char *const *map = icon_maps[which];
@@ -390,10 +468,9 @@ void gfx_icon(int x, int y, enum icon which, int scale)
         for (int column = 0; column < 16; column++) {
             unsigned int color;
 
-            if (!icon_color(map[row][column], icon_accents[which], &color))
+            if (!icon_color(map[row][column], icon_accents[which], &color) ||
+                !styled(map[row][column], row, color, &color))
                 continue;
-            if (map[row][column] != 'K' && row < 7)
-                color = LIGHTER(color, 70 - row * 9); /* gloss, strongest at the top */
             if (scale == 1)
                 plot(origin_x + x + column, origin_y + y + row, color);
             else
@@ -402,57 +479,7 @@ void gfx_icon(int x, int y, enum icon which, int scale)
     }
 }
 
-/* ---- The wallpaper: a sky gradient with glassy bubbles, drawn once per theme -- */
-
-static void bubble(int cx, int cy, int r)
-{
-    int hx = cx - r / 3, hy = cy - r / 3, hr = r / 4 + 1;
-
-    for (int y = cy - r; y <= cy + r; y++) {
-        for (int x = cx - r; x <= cx + r; x++) {
-            int dx = x - cx, dy = y - cy, d = dx * dx + dy * dy, amount = 0;
-
-            if (x < 0 || y < 0 || x >= SCREEN_W || y >= SCREEN_H || d > r * r - r) /* r*r - r: no spikes */
-                continue;
-            if (d > r * r - 4 * r)
-                amount = 110; /* the rim catches the light */
-            else
-                amount = 22 + 40 * d / (r * r); /* clearer in the middle */
-            if ((x - hx) * (x - hx) + (y - hy) * (y - hy) <= hr * hr)
-                amount = 190; /* the highlight */
-            wallpaper[y * SCREEN_W + x] = mix(wallpaper[y * SCREEN_W + x], 0xFFFFFF, amount * theme->bubbles / 256);
-        }
-    }
-}
-
-void gfx_wallpaper(void)
-{
-    /* Positions in 1/1000ths of the screen, so they spread over any layout. */
-    static const short bubbles[][3] = {
-        {812, 175, 46}, {914, 375, 22}, {734, 400, 14}, {140, 750, 30}, {234, 625, 12},
-        {562, 237, 9}, {953, 725, 34}, {469, 800, 18}, {656, 650, 11}, {375, 150, 16},
-    };
-    int horizon = (SCREEN_H - TASKBAR_H) * 3 / 4;
-
-    for (int y = 0; y < SCREEN_H; y++) {
-        unsigned int color = y < horizon ? mix(theme->sky_top, theme->sky_bottom, y * 256 / horizon)
-                                         : mix(theme->sky_bottom, LIGHTER(theme->sky_bottom, theme->gloss * 2 / 3),
-                                               (y - horizon) * 256 / (SCREEN_H - horizon)); /* a glow at the horizon */
-
-        for (int x = 0; x < SCREEN_W; x++)
-            wallpaper[y * SCREEN_W + x] = color;
-    }
-    if (theme->bubbles)
-        for (unsigned int i = 0; i < sizeof(bubbles) / sizeof(bubbles[0]); i++)
-            bubble(bubbles[i][0] * SCREEN_W / 1000, bubbles[i][1] * SCREEN_H / 1000, bubbles[i][2]);
-}
-
-void gfx_draw_wallpaper(int top, int height)
-{
-    memcpy(frame + top * SCREEN_W, wallpaper + top * SCREEN_W, (unsigned int)(height * SCREEN_W) * 4);
-}
-
-/* ---- Pointer ------------------------------------------------------------------- */
+/* ---- The pointer, in the skin's style ---------------------------------------- */
 
 static const char *const arrow[] = {
     "X          ", "XX         ", "X.X        ", "X..X       ", "X...X      ", "X....X     ",
@@ -472,21 +499,57 @@ void gfx_pointer(int x, int y, enum pointer_kind kind)
 {
     const char *const *shape = kind == POINTER_RESIZE ? resize : kind == POINTER_MOVE ? move : arrow;
     int offset = kind == POINTER_MOVE ? 5 : 0;
+    unsigned int edge = INK, fill = 0xFFFFFF;
 
     gfx_unclip();
+    if (skin->pointer == POINTER_BLOCK && kind == POINTER_ARROW) { /* a text-mode mouse cell */
+        gfx_fill(x, y, CHAR_W + 1, CHAR_H + 2, INK);
+        gfx_fill(x + 1, y + 1, CHAR_W - 1, CHAR_H, skin->accent);
+        return;
+    }
+    if (skin->pointer == POINTER_HEAVY)
+        fill = skin->accent;
     for (int row = 0; shape[row]; row++) {
         for (int column = 0; shape[row][column]; column++) {
-            if (shape[row][column] == 'X')
-                plot(x + column - offset, y + row - offset, INK);
-            else if (shape[row][column] == '.')
-                plot(x + column - offset, y + row - offset, 0xFFFFFF);
+            char c = shape[row][column];
+
+            if (c == 'X') {
+                plot(x + column - offset, y + row - offset, edge);
+                if (skin->pointer == POINTER_HEAVY) /* a doubled edge */
+                    plot(x + column - offset + 1, y + row - offset, edge);
+            } else if (c == '.') {
+                plot(x + column - offset, y + row - offset, fill);
+            }
         }
     }
 }
 
 void gfx_present(void)
 {
-    fb_blit(frame, SCREEN_W, SCREEN_H);
+    fb_blit(frame, (unsigned int)SCREEN_W, (unsigned int)SCREEN_H);
+}
+
+/* As the kernel scales the frame: the biggest whole scale that fits, centred. */
+void gfx_screen_rect(int x, int y, int w, int h, int *sx, int *sy, int *sw, int *sh)
+{
+    int scale = real_w / SCREEN_W < real_h / SCREEN_H ? real_w / SCREEN_W : real_h / SCREEN_H;
+    int left = (real_w - SCREEN_W * scale) / 2, top = (real_h - SCREEN_H * scale) / 2;
+
+    if (scale < 1)
+        scale = 1;
+    *sx = left + x * scale;
+    *sy = top + y * scale;
+    *sw = w * scale;
+    *sh = h * scale;
+}
+
+/* The kernel draws console text 2x on screens 1024 or wider; BDeskUI's text is 1x layout. */
+int gfx_text_scale(void)
+{
+    int scale = real_w / SCREEN_W < real_h / SCREEN_H ? real_w / SCREEN_W : real_h / SCREEN_H;
+    int console = real_w >= 1024 ? 2 : 1;
+
+    return scale >= console ? 1 : console / (scale < 1 ? 1 : scale);
 }
 
 void copy_string(char *out, unsigned int size, const char *text)

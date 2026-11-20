@@ -31,6 +31,17 @@ void proc_memory(uint32_t *total_kib, uint32_t *free_kib)
     mem_stats(total_kib, free_kib);
 }
 
+static struct proc *viewport_owner;
+
+int proc_viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+    int rc = console_viewport(x, y, w, h);
+
+    if (rc == 0)
+        viewport_owner = w && h ? current : 0;
+    return rc;
+}
+
 struct proc *proc_current(void)
 {
     return current;
@@ -196,6 +207,10 @@ int proc_run(const char *path, int argc, char *const *argv)
         }
         tcp_close_owned(child);
         console_graphics_end();
+        if (viewport_owner == child) { /* it crashed or forgot: the whole screen again */
+            console_viewport(0, 0, 0, 0);
+            viewport_owner = 0;
+        }
     }
 
     paging_free_user(child->tables);

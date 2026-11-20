@@ -65,23 +65,22 @@ static void open_entry(int index)
 
         if (rc < 0)
             copy_string(status, sizeof(status), strerror(rc));
-    } else if (ends_with(e->name, ".bs")) {
-        terminal_run(target);
+    } else if (ends_with(e->name, ".bs") || ends_with(e->name, ".bsh")) {
+        terminal_new(target); /* programs and scripts run in a terminal window */
     } else if (ends_with(e->name, ".html") || ends_with(e->name, ".htm")) {
-        char url[BS_PATH_MAX + 8], *argv[2];
+        char url[BS_PATH_MAX + 8];
 
         copy_string(url, sizeof(url), "file:");
         copy_string(url + 5, sizeof(url) - 5, target);
-        argv[0] = "web";
-        argv[1] = url;
-        bdeskui_run_program(2, argv);
+        program_window("web", url);
     } else {
         notes_open(target);
     }
 }
 
-static void files_open(const char *arg)
+static void files_open(int instance, const char *arg)
 {
+    (void)instance;
     if (load(arg ? arg : path[0] ? path : bdeskui_home()) < 0)
         load("/");
 }
@@ -91,17 +90,18 @@ static int visible_rows(int h)
     return (h - BAR_H - 4) / ROW_H;
 }
 
-static void files_draw(int w, int h, int focused)
+static void files_draw(int instance, int w, int h, int focused)
 {
+    (void)instance;
     int rows = visible_rows(h);
 
     (void)focused;
-    gfx_gradient(0, 0, w, BAR_H, LIGHTER(theme->window, 120), DARKER(theme->window, 30));
+    gfx_gradient(0, 0, w, BAR_H, LIGHTER(skin->window, 120), DARKER(skin->window, 30));
     gfx_button(4, 3, 30, 14, "Up", 0);
     gfx_button(38, 3, 40, 14, "Open", 0);
-    gfx_inset(85, 4, w - 92, 12, theme->field);
-    gfx_text_n(88, 7, path, (w - 98) / CHAR_W, theme->text);
-    gfx_fill(0, BAR_H, w, 2, theme->line);
+    gfx_inset(85, 4, w - 92, 12, skin->field);
+    gfx_text_n(88, 7, path, (w - 98) / CHAR_W, skin->text);
+    gfx_fill(0, BAR_H, w, 2, skin->line);
 
     for (int i = 0; i < rows && scroll + i < entry_count; i++) {
         const struct bs_dirent *e = &entries[scroll + i];
@@ -111,9 +111,9 @@ static void files_draw(int w, int h, int focused)
                                                                              : ICON_FILE;
 
         if (scroll + i == selected)
-            gfx_gel(2, y - 1, w - 4, ROW_H, theme->select, 0);
+            gfx_gel(2, y - 1, w - 4, ROW_H, skin->select, 0);
         gfx_icon(6, y, icon, 1);
-        gfx_text_n(26, y + 5, e->name, (w - 108) / CHAR_W, theme->text);
+        gfx_text_n(26, y + 5, e->name, (w - 108) / CHAR_W, skin->text);
         y += 5;
         if (e->type == BS_TYPE_FILE) {
             char size[16];
@@ -124,19 +124,20 @@ static void files_draw(int w, int h, int focused)
                 size[--n] = (char)('0' + v % 10);
                 v /= 10;
             } while (v && n);
-            gfx_text(w - (int)(15 - n) * CHAR_W - 8, y, size + n, theme->dim);
+            gfx_text(w - (int)(15 - n) * CHAR_W - 8, y, size + n, skin->dim);
         } else {
-            gfx_text(w - 8 * CHAR_W, y, e->type == BS_TYPE_DIR ? "folder" : "link", theme->dim);
+            gfx_text(w - 8 * CHAR_W, y, e->type == BS_TYPE_DIR ? "folder" : "link", skin->dim);
         }
     }
     if (entry_count == 0)
-        gfx_text(18, BAR_H + 6, "(empty)", theme->dim);
+        gfx_text(18, BAR_H + 6, "(empty)", skin->dim);
     if (status[0])
         gfx_text(8, h - 12, status, 0xE0564A);
 }
 
-static void files_press(int x, int y, int w, int h)
+static void files_press(int instance, int x, int y, int w, int h)
 {
+    (void)instance;
     int row;
 
     (void)w;
@@ -165,8 +166,9 @@ static void files_press(int x, int y, int w, int h)
     last_click_frame = wm_frame();
 }
 
-static void files_key(int key)
+static void files_key(int instance, int key)
 {
+    (void)instance;
     if (key == BS_KEY_DOWN && selected + 1 < entry_count) {
         selected++;
     } else if (key == BS_KEY_UP && selected > 0) {
@@ -185,7 +187,7 @@ static void files_key(int key)
 }
 
 const struct app app_files = {
-    .name = "BSfile", .blurb = "browse files", .accent = 0xE08A1E, .icon = ICON_FILES,
+    .name = "BSfile", .blurb = "browse files", .icon = ICON_FILES,
     .default_w = 330, .default_h = 260, .min_w = 200, .min_h = 100,
     .open = files_open, .draw = files_draw, .key = files_key, .press = files_press,
 };

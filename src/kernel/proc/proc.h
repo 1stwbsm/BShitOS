@@ -35,6 +35,10 @@ void proc_memory(uint32_t *total_kib, uint32_t *free_kib);
 /* The running process's uid and gid; root while the kernel runs for itself. */
 void proc_credentials(uint32_t *uid, uint32_t *gid);
 
+/* Confines the console to a screen rectangle for the running process and its children
+ * (0 size: the whole screen). It goes back to the whole screen when that process exits. */
+int proc_viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h);
+
 int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c);
 
 #endif

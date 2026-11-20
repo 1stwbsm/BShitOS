@@ -47,7 +47,7 @@ static int caret_line(void)
 
 void notes_open(const char *file)
 {
-    wm_open(&app_notes, file);
+    wm_open(&app_notes, 0, file);
 }
 
 static void load(const char *file)
@@ -100,8 +100,9 @@ static int notes_unsaved(void)
     return modified;
 }
 
-static void notes_open_request(const char *file)
+static void notes_open_request(int instance, const char *file)
 {
+    (void)instance;
     if (!file && !path[0])
         default_path();
     if (file && (strcmp(file, path) != 0 || !modified))
@@ -118,31 +119,32 @@ static void keep_caret_visible(void)
         top_line = line - visible_lines + 1;
 }
 
-static void notes_draw(int w, int h, int focused)
+static void notes_draw(int instance, int w, int h, int focused)
 {
+    (void)instance;
     int line = 0, column = 0;
 
     visible_lines = (h - BAR_H - PAD * 2) / LINE_H;
     visible_columns = (w - PAD * 2) / CHAR_W;
 
-    gfx_gradient(0, 0, w, BAR_H, LIGHTER(theme->window, 120), DARKER(theme->window, 30));
+    gfx_gradient(0, 0, w, BAR_H, LIGHTER(skin->window, 120), DARKER(skin->window, 30));
     gfx_button(4, 3, 36, 14, "Save", modified);
     gfx_button(44, 3, 36, 14, "New", 0);
-    gfx_text_n(86, 7, path, (w - 92) / CHAR_W - 2, theme->text);
+    gfx_text_n(86, 7, path, (w - 92) / CHAR_W - 2, skin->text);
     if (modified)
-        gfx_text(w - 10, 7, "*", app_notes.accent);
-    gfx_fill(0, BAR_H, w, 2, theme->line);
-    gfx_fill(0, BAR_H + 2, w, h - BAR_H - 2, theme->field);
+        gfx_text(w - 10, 7, "*", skin->accent);
+    gfx_fill(0, BAR_H, w, 2, skin->line);
+    gfx_fill(0, BAR_H + 2, w, h - BAR_H - 2, skin->field);
     for (int rule = BAR_H + PAD + LINE_H - 1; rule < h; rule += LINE_H) /* the rules sit under each line */
-        gfx_fill(0, rule, w, 1, theme->rule);
-    gfx_fill(PAD - 3, BAR_H + 2, 1, h - BAR_H - 2, mix(theme->field, 0xE05050, 110)); /* the margin */
+        gfx_fill(0, rule, w, 1, skin->rule);
+    gfx_fill(PAD - 3, BAR_H + 2, 1, h - BAR_H - 2, mix(skin->field, 0xE05050, 110)); /* the margin */
 
     for (int i = 0; i <= length; i++) {
         int on_screen = line >= top_line && line < top_line + visible_lines;
         int x = PAD + column * CHAR_W, y = BAR_H + PAD + (line - top_line) * LINE_H;
 
         if (i == caret && on_screen && focused && wm_frame() / 25 % 2 == 0)
-            gfx_fill(x - 1, y - 1, 1, 9, theme->text);
+            gfx_fill(x - 1, y - 1, 1, 9, skin->text);
         if (i == length)
             break;
         if (text[i] == '\n') {
@@ -153,12 +155,12 @@ static void notes_draw(int w, int h, int focused)
         if (on_screen && column < visible_columns) {
             char c[2] = {text[i], 0};
 
-            gfx_text(x, y, c, theme->text);
+            gfx_text(x, y, c, skin->text);
         }
         column++;
     }
     if (status[0])
-        gfx_text(w - (int)strlen(status) * CHAR_W - 8, h - 12, status, theme->dim);
+        gfx_text(w - (int)strlen(status) * CHAR_W - 8, h - 12, status, skin->dim);
 }
 
 static void insert(char c)
@@ -200,8 +202,9 @@ static void move_vertical(int direction)
         caret = line_end(target);
 }
 
-static void notes_key(int key)
+static void notes_key(int instance, int key)
 {
+    (void)instance;
     switch (key) {
     case CTRL('s'): save(); break;
     case '\b': if (caret > 0) delete_at(--caret); break;
@@ -221,8 +224,9 @@ static void notes_key(int key)
     keep_caret_visible();
 }
 
-static void notes_press(int x, int y, int w, int h)
+static void notes_press(int instance, int x, int y, int w, int h)
 {
+    (void)instance;
     int want_line, want_column, line = 0, position = 0;
 
     (void)w;
@@ -251,7 +255,7 @@ static void notes_press(int x, int y, int w, int h)
 }
 
 const struct app app_notes = {
-    .name = "BSnote", .blurb = "edit text", .accent = 0x3F78D8, .icon = ICON_NOTES,
+    .name = "BSnote", .blurb = "edit text", .icon = ICON_NOTES,
     .unsaved = notes_unsaved, .save = save,
     .default_w = 380, .default_h = 260, .min_w = 180, .min_h = 90,
     .open = notes_open_request, .draw = notes_draw, .key = notes_key, .press = notes_press,

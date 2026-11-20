@@ -423,6 +423,9 @@ int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c)
     case SYS_CONSOLE_SIZE: return (int)console_size();
     case SYS_POWEROFF: shutdown_request(BS_SHUTDOWN_POWEROFF); return 0;
     case SYS_SHUTDOWN: shutdown_request((int)a); return shutdown_pending() ? 0 : -BS_EINVAL;
+    case SYS_VIEWPORT: return proc_viewport(a & 0xFFFF, a >> 16, b & 0xFFFF, b >> 16);
+    case SYS_CONSOLE_ATTRS:
+        return user_range_ok(b, c) && c ? console_attrs(a, (uint8_t *)b, c) : -BS_EFAULT;
     case SYS_RANDOM:
         if (b > 256 || !user_range_ok(a, b))
             return -BS_EINVAL;

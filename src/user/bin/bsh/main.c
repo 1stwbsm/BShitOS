@@ -14,6 +14,24 @@
 #define DEFAULT_PROMPT "%u %{93}%d%{0}%?%t %{1}>>%{0} "
 
 static unsigned int last_took;
+int window_mode;
+
+/* Leaving a BDeskUI terminal window for the desktop: note where we were, so the
+ * window comes back in the same directory. */
+static int detach(void)
+{
+    char path[BS_PATH_MAX], cwd[BS_PATH_MAX];
+    int fd;
+
+    path[0] = 0;
+    if (var_get("HOME") && append(path, sizeof(path), var_get("HOME")) == 0 &&
+        append(path, sizeof(path), "/.bsh_cwd") == 0 && (fd = open(path, BS_O_WRITE)) >= 0) {
+        getcwd(cwd, sizeof(cwd));
+        write(fd, cwd, strlen(cwd));
+        close(fd);
+    }
+    return BSH_DETACHED;
+}
 
 static struct bs_user me;
 
@@ -187,6 +205,14 @@ int main(int argc, char **argv)
     static char line[LINE_MAX], expanded[LINE_MAX], prompt[256], cwd[BS_PATH_MAX];
 
     defaults();
+    if (argc > 1 && strcmp(argv[1], "--window") == 0) { /* in a BDeskUI terminal window */
+        char *name = argv[0];
+
+        window_mode = 1;
+        argc--;
+        argv++;
+        argv[0] = name; /* not "--window": a leading - would mean a login shell */
+    }
     if (argc > 2 && strcmp(argv[1], "-c") == 0)
         return run_line(argv[2]);
     if (argc > 1)
@@ -194,7 +220,8 @@ int main(int argc, char **argv)
 
     if (argv[0][0] == '-') /* login shell: greet, start at home */
         show_motd();
-    chdir(var_get("HOME"));
+    if (!window_mode) /* a window starts where BDeskUI left it */
+        chdir(var_get("HOME"));
     getcwd(cwd, sizeof(cwd));
     var_set("PWD", cwd);
     run_rc(SYSTEM_RC);
@@ -221,7 +248,10 @@ int main(int argc, char **argv)
 
         commands_refresh();
         build_prompt(prompt, sizeof(prompt));
-        if (edit_line(prompt, line, sizeof(line)) <= 0)
+        changed = edit_line(prompt, line, sizeof(line));
+        if (changed == EDIT_DETACH)
+            return detach();
+        if (changed <= 0)
             continue;
         changed = expand_history(line, expanded, sizeof(expanded));
         if (changed < 0) {

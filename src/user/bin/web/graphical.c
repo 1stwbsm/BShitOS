@@ -5,8 +5,12 @@
 #include "render.h"
 #include "ui.h"
 
-#define SCREEN_W 640
-#define SCREEN_H 400
+/* The screen it was given: all of it, or a BDeskUI window. Set on entry. */
+#define MAX_W 1400
+#define MAX_H 900
+static int screen_w = 640, screen_h = 400;
+#define SCREEN_W screen_w
+#define SCREEN_H screen_h
 #define CHAR_W 6
 #define BAR_H 24
 #define STATUS_H 14
@@ -37,11 +41,11 @@ struct button {
 
 enum button_id { BUTTON_BACK, BUTTON_HOME, BUTTON_TEXT, BUTTON_QUIT, BUTTON_COUNT };
 
-static const struct button buttons[BUTTON_COUNT] = {
+static struct button buttons[BUTTON_COUNT] = {
     [BUTTON_BACK] = {4, 40, "Back"},
     [BUTTON_HOME] = {48, 40, "Home"},
-    [BUTTON_TEXT] = {SCREEN_W - 88, 40, "Text"},
-    [BUTTON_QUIT] = {SCREEN_W - 44, 40, "Quit"},
+    [BUTTON_TEXT] = {640 - 88, 40, "Text"},
+    [BUTTON_QUIT] = {640 - 44, 40, "Quit"},
 };
 
 #define ADDRESS_X 92
@@ -67,11 +71,11 @@ static const char *const pointer[] = {
     "     XXXX  ",
 };
 
-static unsigned int frame[SCREEN_W * SCREEN_H];
+static unsigned int frame[MAX_W * MAX_H]; /* untouched pages take no memory */
 static char address[WEB_URL_MAX];
 static char rendered_url[WEB_URL_MAX];
 static int address_length, address_focused;
-static int mouse_x = SCREEN_W / 2, mouse_y = SCREEN_H / 2;
+static int mouse_x = 320, mouse_y = 200;
 static int dragging_thumb;
 static int scroll_y;
 
@@ -447,6 +451,32 @@ static int handle_key(int key, enum graphical_result *result)
     return 0;
 }
 
+/*
+ * Sizes the page to the screen: 2x on big screens (as BDeskUI draws), 1x on
+ * small ones or small windows. A width change means laying the page out again.
+ */
+static void fit_screen(void)
+{
+    struct bs_sysinfo info;
+    int scale, old_width = page_width;
+
+    sysinfo(&info);
+    scale = info.screen_width >= 1000 && info.screen_height >= 600 ? 2 : 1;
+    screen_w = (int)info.screen_width / scale;
+    screen_h = (int)info.screen_height / scale;
+    screen_w = screen_w > MAX_W ? MAX_W : screen_w < 320 ? 320 : screen_w;
+    screen_h = screen_h > MAX_H ? MAX_H : screen_h < 200 ? 200 : screen_h;
+    buttons[BUTTON_TEXT].x = SCREEN_W - 88;
+    buttons[BUTTON_QUIT].x = SCREEN_W - 44;
+    page_width = SCREEN_W - SCROLLBAR_W;
+    if (page_width != old_width)
+        rendered_url[0] = 0; /* laid out for another width */
+    if (mouse_x >= SCREEN_W || mouse_y >= SCREEN_H) {
+        mouse_x = SCREEN_W / 2;
+        mouse_y = SCREEN_H / 2;
+    }
+}
+
 enum graphical_result web_graphical(void)
 {
     enum graphical_result result = BACK_TO_TEXT;
@@ -454,6 +484,7 @@ enum graphical_result web_graphical(void)
     unsigned int buttons_down = 0;
     int dirty = 1;
 
+    fit_screen();
     mouse_read(&stale); /* discard motion from before we started */
     set_address(page.url);
     address_focused = dragging_thumb = 0;

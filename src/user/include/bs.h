@@ -54,13 +54,19 @@ int table_append(const char *path, const char *line);
 int table_remove(const char *path, const char *name);
 /* Reads a line without echoing it. Returns its length, or -1 on Ctrl+C. */
 int read_secret(const char *prompt, char *out, unsigned int size);
-/* Reads back one row of the text console. Returns its length, or -1. */
+/* Reads back one row of the text console. Returns its length, or -1. Bytes 0x80-0x86 are
+ * box shapes: full block, then double lines = | top-left top-right bottom-left bottom-right. */
 int console_line(int row, char *out, unsigned int size);
 
 /* Asks every program to exit, then powers off or restarts (BS_SHUTDOWN_*). It
  * returns: exit soon after. Long-running programs should poll shutting_down(). */
 int shutdown(int mode);
 int shutting_down(void);
+/* Confines the screen to x, y, w, h (real pixels): console text and fb_blit stay
+ * inside, and programs see a screen that size. w = 0 gives the whole screen back. */
+int viewport(int x, int y, int w, int h);
+/* A console row's colour attributes: bits 0-4 colour (0 default, 1-16 palette), 0x20 inverse, 0x40 bold. */
+int console_attrs(int row, unsigned char *out, unsigned int size);
 void get_random(void *out, unsigned int length); /* from the kernel */
 int cpu_has_cpuid(void); /* a 386 or early 486 has no CPUID */
 void net_info(struct bs_netinfo *out);

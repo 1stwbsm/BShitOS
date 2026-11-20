@@ -171,11 +171,17 @@ static void follow_link(int first_digit)
 int main(int argc, char **argv)
 {
     char url[WEB_URL_MAX];
+    int graphical = 0;
 
     console_size(&cols, &rows);
     columns = cols - 1 < WEB_COLUMNS ? cols - 1 : WEB_COLUMNS;
     console_clear();
 
+    if (argc > 1 && strcmp(argv[1], "--graphical") == 0) {
+        graphical = 1;
+        argc--;
+        argv++;
+    }
     if (argc > 1) {
         unsigned int length = strlen(argv[1]);
 
@@ -188,6 +194,11 @@ int main(int argc, char **argv)
     }
 
     web_navigate(url, 0);
+    if (graphical && web_graphical() == QUIT_BROWSER) { /* --graphical: BDeskUI's window */
+        console_clear();
+        return 0;
+    }
+    graphics_end();
     render();
 
     for (;;) {

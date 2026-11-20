@@ -2,7 +2,8 @@
 #ifndef WEB_RENDER_H
 #define WEB_RENDER_H
 
-#define PAGE_WIDTH 626 /* the screen, less the scrollbar */
+extern int page_width; /* the screen, less the scrollbar; set by the graphical mode */
+#define PAGE_WIDTH page_width
 #define GLYPH_W 6
 #define GLYPH_H 8
 

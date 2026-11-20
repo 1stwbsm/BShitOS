@@ -91,8 +91,8 @@ static int system_tick(void)
 
 static void row(int y, const char *label, const char *value)
 {
-    gfx_text(LEFT, y, label, theme->dim);
-    gfx_text(VALUE_X, y, value, theme->text);
+    gfx_text(LEFT, y, label, skin->dim);
+    gfx_text(VALUE_X, y, value, skin->text);
 }
 
 static void usage_row(int y, int w, const char *label, unsigned int used_kib, unsigned int total_kib)
@@ -117,8 +117,9 @@ static void ip_text(char *out, unsigned int size, unsigned int ip)
     }
 }
 
-static void system_draw(int w, int h, int focused)
+static void system_draw(int instance, int w, int h, int focused)
 {
+    (void)instance;
     char text[64];
     int y = 8;
 
@@ -128,7 +129,7 @@ static void system_draw(int w, int h, int focused)
         refresh();
 
     gfx_text_scaled(LEFT + 1, y + 1, "BShitOS", 2, INK);
-    gfx_text_scaled(LEFT, y, "BShitOS", 2, app_system.accent);
+    gfx_text_scaled(LEFT, y, "BShitOS", 2, skin->accent);
     y += 22;
 
     text[0] = 0;
@@ -181,7 +182,7 @@ static void system_draw(int w, int h, int focused)
 }
 
 const struct app app_system = {
-    .name = "BSsys", .blurb = "machine status", .accent = 0x9A5ACB, .icon = ICON_SYSTEM,
+    .name = "BSsys", .blurb = "machine status", .icon = ICON_SYSTEM,
     .default_w = 330, .default_h = 230, .min_w = 260, .min_h = 150,
     .draw = system_draw, .tick = system_tick,
 };

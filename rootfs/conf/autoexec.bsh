@@ -1,5 +1,5 @@
 # Run by every login shell, after /conf/bshrc and ~/.bshrc.
-# Starts BDeskUI where there is a graphics mode. Logging out of BDeskUI logs out
-# here too. "to TTY" in its menu, no graphics mode, or autostart=no in your
-# ~/.bdeskui.conf (Settings: start at login) leave you at this prompt instead.
+# After a text login without the graphical login (graphical=no in /conf/login.conf),
+# this starts BDeskUI where there is a graphics mode; logging out of it logs out here
+# too. With the graphical login on, a text login means you picked TTY, so you stay.
 bdeskui --autostart && logout

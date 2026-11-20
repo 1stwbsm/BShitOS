@@ -25,4 +25,9 @@ uint32_t console_size(void);
 /* Copies one row of text (trailing spaces trimmed). Returns its length, or -1. */
 int console_line(uint32_t row, char *out, uint32_t size);
 
+/* Colour attributes of a row (see console.c); returns how many. */
+int console_attrs(uint32_t row, uint8_t *out, uint32_t size);
+/* Makes the console a terminal in x, y, w, h (pixels); w = 0 for the whole screen. */
+int console_viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h);
+
 #endif

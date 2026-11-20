@@ -346,6 +346,8 @@ void render_find_background(void)
     }
 }
 
+int page_width = 626;
+
 void render_layout(void)
 {
     int root = -1;

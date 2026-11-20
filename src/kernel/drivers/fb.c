@@ -16,6 +16,8 @@ static struct {
     uint32_t width, height, stride; /* pixels, or cells in text mode */
     uint32_t scale, cell_w, cell_h;
     int bgr;
+    uint32_t *full_base; /* the whole screen; base/width/height are the viewport */
+    uint32_t full_width, full_height;
 } fb;
 
 /* The 16 VGA text colours, in attribute order. */
@@ -54,9 +56,37 @@ void fb_init(const struct bootinfo_framebuffer *info)
     fb.height = info->height;
     fb.stride = info->pixels_per_line;
     fb.bgr = info->format == BOOTINFO_FB_BGRX;
+    fb.full_base = fb.base;
+    fb.full_width = fb.width;
+    fb.full_height = fb.height;
     fb.scale = fb.width >= 1024 ? 2 : 1; /* 640x480 gets small text, not 53 columns */
     fb.cell_w = 6 * fb.scale;
     fb.cell_h = 8 * fb.scale;
+}
+
+/*
+ * Confines all drawing to a rectangle of the screen (0 width: the whole screen).
+ * BDeskUI gives a program the inside of a window this way; the program sees a
+ * screen that size and never draws outside it.
+ */
+int fb_set_viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+    if (!fb.full_base)
+        return -1; /* text mode has no viewports */
+    if (w == 0 || h == 0 || x >= fb.full_width || y >= fb.full_height) {
+        fb.base = fb.full_base;
+        fb.width = fb.full_width;
+        fb.height = fb.full_height;
+        return 0;
+    }
+    if (x + w > fb.full_width)
+        w = fb.full_width - x;
+    if (y + h > fb.full_height)
+        h = fb.full_height - y;
+    fb.base = fb.full_base + y * fb.stride + x;
+    fb.width = w;
+    fb.height = h;
+    return 0;
 }
 
 /* Pixels; 0x0 in text mode, which tells graphics programs there is no screen. */

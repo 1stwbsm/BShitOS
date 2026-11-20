@@ -522,6 +522,14 @@ int edit_line(const char *prompt_text, char *out, unsigned int out_size)
             put("\n");
             buf[0] = 0;
             return -1;
+        case CTRL('q'):
+            if (!window_mode)
+                break;
+            pos = len;
+            render();
+            put("\n");
+            buf[0] = 0;
+            return EDIT_DETACH;
         case '\n':
             return finish();
         case CTRL('c'):

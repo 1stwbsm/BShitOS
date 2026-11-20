@@ -49,6 +49,8 @@ int disk_read(const struct bs_disk_io *io) { return syscall3(SYS_DISK_READ, (int
 int disk_write(const struct bs_disk_io *io) { return syscall3(SYS_DISK_WRITE, (int)io, 0, 0); }
 int console_line(int row, char *out, unsigned int size) { return syscall3(SYS_CONSOLE_LINE, row, (int)out, (int)size); }
 int shutdown(int mode) { return syscall3(SYS_SHUTDOWN, mode, 0, 0); }
+int viewport(int x, int y, int w, int h) { return syscall3(SYS_VIEWPORT, x | y << 16, w | h << 16, 0); }
+int console_attrs(int row, unsigned char *out, unsigned int size) { return syscall3(SYS_CONSOLE_ATTRS, row, (int)out, (int)size); }
 
 void get_random(void *out, unsigned int length)
 {

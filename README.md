@@ -26,14 +26,30 @@ A 32-bit hobby operating system written in C, from the bootloader up.
 - **Installer**: `su -c install` on the live ISO puts BShitOS on a SATA disk. It
   partitions the disk (GPT, ESP, BSFS filling the rest), copies the system and
   creates your account and a root password.
-- **BDeskUI**: the operating environment on top of the TTY, started at login by
-  `/conf/autoexec.bsh` wherever there's a graphics mode. It has icon tiles, windows
-  with V/^/X title buttons, and a taskbar with the B launcher, where every window gets
-  [name | ^ | X]. Windows are glossy chrome held in heavy outlines with hard shadows.
-  The "night" skin is the default; aqua, meadow, dusk and concrete are the others.
-  BDeskUI fills any screen at a whole-number scale (1920x1080 is 640x360 at 3x,
-  1280x800 is 640x400 at 2x). "to TTY" in the B menu drops you to the shell, and
-  BSconf can turn the autostart off.
+- **BDeskUI**: a modern-DOS operating environment on top of the TTY. One program runs
+  at a time: started from the desktop, it gets the inside of a window (the kernel
+  confines its console and framebuffer to that rectangle) while the desktop waits.
+  - **Login screen**: where there's a graphics mode, login hands off to BDeskUI's
+    graphical login. Pick a user, type the password, or press TTY for the text prompt.
+    `graphical=no` in `/conf/login.conf` turns it off.
+  - **BSterm** is a real terminal: bsh in the window, output flowing as on any
+    terminal. Ctrl+Q goes back to the desktop and the window keeps what was on screen,
+    so click it to carry on where you left off.
+  - **Windowed programs**: programs with a graphical mode (`windowed=` in
+    `/conf/bdeskui.conf`, web for now) open in a window of their own. Everything else,
+    like cube, opens in a terminal window.
+  - **Skins** change more than colours: icon style, window chrome, title buttons,
+    taskbar layout and placement, pointer and metrics. Backgrounds are always one solid
+    colour. The four skins:
+    - **night** (default): charcoal, white lines, line-art icons
+    - **aqua**: glossy gel, full-colour icons
+    - **dos**: text-mode boxes, EGA icons, the bar on top
+    - **concrete**: brutalist paper and ink, pictogram icons
+
+    BSconf previews each one and saves your pick to `~/.bdeskui.conf`.
+  - **Scale**: any screen, at a whole-number scale that leaves at least 640x400
+    (1920x1080 is 960x540 at 2x). "TTY" in the B menu gives bsh the whole screen until
+    you exit it.
 - **Graceful shutdown**: `poweroff`, `reboot` and the power button ask every program
   to exit first (BDeskUI offers to save unsaved work), then the disks are flushed.
 - **web**: a text web browser with HTTPS

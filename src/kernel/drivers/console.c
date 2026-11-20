@@ -332,9 +332,7 @@ int console_line(uint32_t r, char *out, uint32_t size)
     if (length >= size)
         length = size - 1;
     for (uint32_t c = 0; c < length; c++) {
-        char ch = cells[r][c];
-
-        out[c] = (unsigned char)ch >= 0x80 ? '#' : ch;
+        out[c] = cells[r][c]; /* glyphs above 0x7F are fb_glyph shapes (drivers/fb.h) */
     }
     out[length] = 0;
     return (int)length;
@@ -343,6 +341,34 @@ int console_line(uint32_t r, char *out, uint32_t size)
 uint32_t console_size(void)
 {
     return cols << 16 | rows;
+}
+
+int console_attrs(uint32_t r, uint8_t *out, uint32_t size)
+{
+    if (r >= rows || size == 0)
+        return -1;
+    if (size > cols)
+        size = cols;
+    memcpy(out, attrs[r], size);
+    return (int)size;
+}
+
+/* A new screen area: the console becomes a terminal that size, starting empty. */
+int console_viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+    if (fb_set_viewport(x, y, w, h) < 0)
+        return -1;
+    fb_size(&cols, &rows);
+    if (cols > MAX_COLS)
+        cols = MAX_COLS;
+    if (rows > MAX_ROWS)
+        rows = MAX_ROWS;
+    graphics_active = 0;
+    saved_col = saved_row = 0;
+    escape_state = ESCAPE_NONE;
+    current_attr = 0;
+    console_clear();
+    return 0;
 }
 
 static void repaint(void)

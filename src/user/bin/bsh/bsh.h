@@ -74,7 +74,10 @@ extern const struct builtin builtins[];
 const struct builtin *builtin_find(const char *name);
 
 /* edit.c: the line editor and history */
-int edit_line(const char *prompt, char *out, unsigned int size); /* length, or -1 if dropped */
+int edit_line(const char *prompt, char *out, unsigned int size); /* length, -1 if dropped, EDIT_DETACH */
+#define EDIT_DETACH (-2) /* Ctrl+Q in a BDeskUI terminal window: back to the desktop */
+#define BSH_DETACHED 200 /* bsh's exit code for that; BDeskUI keeps the window */
+extern int window_mode; /* running in a BDeskUI terminal window (bsh --window) */
 void history_load(void);
 void history_add(const char *line);
 int history_count(void);

@@ -18,6 +18,8 @@ enum fb_glyph {
 void fb_init(const struct bootinfo_framebuffer *fb);
 void fb_size(uint32_t *cols, uint32_t *rows);
 void fb_resolution(uint32_t *width, uint32_t *height);
+/* Draw only inside x, y, w, h (pixels); w = 0 for the whole screen. */
+int fb_set_viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 void fb_clear(uint32_t color);
 void fb_put(uint32_t col, uint32_t row, char c, uint32_t fg, uint32_t bg);
 void fb_scroll(uint32_t bg);

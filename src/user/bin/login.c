@@ -54,15 +54,36 @@ static int start_session(void)
     return code < 0 ? 1 : 0;
 }
 
+#define EXIT_TTY_LOGIN 4 /* bdeskui: the login screen's TTY button */
+
+/*
+ * Where there is a graphics mode, BDeskUI's login screen does the asking (it runs
+ * as root until someone logs in, then becomes their session). Returns 1 if it
+ * handled the login and the session has ended, 0 to ask on the text console.
+ */
+static int graphical_login(const struct bs_sysinfo *info, const char *live_user)
+{
+    char value[8], *argv[4] = {"bdeskui", "--login", "--auto", (char *)live_user};
+    int code;
+
+    if (!info->screen_width || (conf_get(CONF_PATH, "graphical", value, sizeof(value)) == 0 &&
+                                strcmp(value, "no") == 0))
+        return 0;
+    code = spawn("/bin/bdeskui.bs", live_user ? 4 : 2, argv);
+    return code >= 0 && code != EXIT_TTY_LOGIN;
+}
+
 int main(void)
 {
     char name[BS_USER_NAME_MAX], password[128], live_user[BS_USER_NAME_MAX];
     struct bs_sysinfo info;
-    int failures = 0;
+    int failures = 0, live;
 
     sysinfo(&info);
-    if ((info.flags & BS_SYSINFO_LIVE) && conf_get(CONF_PATH, "live_user", live_user, sizeof(live_user)) == 0 &&
-        login(live_user, 0) == 0) {
+    live = (info.flags & BS_SYSINFO_LIVE) && conf_get(CONF_PATH, "live_user", live_user, sizeof(live_user)) == 0;
+    if (graphical_login(&info, live ? live_user : 0))
+        return 0; /* the session is over; the kernel starts login again */
+    if (live && login(live_user, 0) == 0) {
         printf("\033[90mlive session: logged in as %s. root's password is empty: 'su -c install' installs to disk.\033[0m\n",
                live_user);
         return start_session();
