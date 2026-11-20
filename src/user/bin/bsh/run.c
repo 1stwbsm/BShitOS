@@ -26,7 +26,12 @@ struct command {
 };
 
 int last_status;
-static int exit_flag, exit_status;
+static int exit_flag, exit_status, script_exited;
+
+int run_script_exited(void)
+{
+    return script_exited;
+}
 static int positional_count;
 static char **positional;
 static int depth; /* run_line nesting: the interactive line, then scripts */
@@ -475,6 +480,7 @@ int run_script(const char *path, int argc, char **argv)
         line = end ? end + 1 : 0;
     }
     set_positional(saved_count, saved);
+    script_exited = exit_flag;
     if (exit_flag) {
         exit_flag = 0;
         last_status = exit_status;

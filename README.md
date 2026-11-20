@@ -21,7 +21,13 @@ A 32-bit hobby operating system written in C, from the bootloader up.
 - **Installer**: `su -c install` on the live ISO puts BShitOS on a SATA disk. It
   partitions the disk (GPT, ESP, BSFS filling the rest), copies the system and
   creates your account and a root password.
-- **Desk**: a windowed graphical environment (type `desk`)
+- **BDeskUI**: the operating environment on top of the TTY, started at login by
+  `/conf/autoexec.bsh` wherever there's a graphics mode. It has windows, a taskbar,
+  desktop icons and a launch menu, drawn in gel and glass inside heavy black frames
+  with hard shadows. It comes with four skins. "to TTY" in its menu drops you to the
+  shell, and Settings can turn the autostart off.
+- **Graceful shutdown**: `poweroff`, `reboot` and the power button ask every program
+  to exit first (BDeskUI offers to save unsaved work), then the disks are flushed.
 - **web**: a text web browser with HTTPS
 
 ## Building

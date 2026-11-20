@@ -1,10 +1,10 @@
 /* Notes: a text editor in a window. Ctrl+S saves. */
 #include "bs.h"
-#include "desk.h"
+#include "bdeskui.h"
 
 #define TEXT_MAX 32768
 #define BAR_H 20
-#define PAD 4
+#define PAD 8
 #define DEFAULT_NAME "/untitled.txt"
 
 static char text[TEXT_MAX];
@@ -14,7 +14,7 @@ static char path[BS_PATH_MAX];
 /* ~/untitled.txt */
 static void default_path(void)
 {
-    copy_string(path, sizeof(path), desk_home());
+    copy_string(path, sizeof(path), bdeskui_home());
     if (strlen(path) + sizeof(DEFAULT_NAME) < sizeof(path))
         memcpy(path + strlen(path), DEFAULT_NAME, sizeof(DEFAULT_NAME));
 }
@@ -76,22 +76,28 @@ static void load(const char *file)
     }
 }
 
-static void save(void)
+static int save(void)
 {
     int fd = open(path, BS_O_WRITE), written;
 
     if (fd < 0) {
         copy_string(status, sizeof(status), strerror(fd));
-        return;
+        return fd;
     }
     written = write(fd, text, (unsigned int)length);
     close(fd);
     if (written == length) {
         modified = 0;
         copy_string(status, sizeof(status), "saved");
-    } else {
-        copy_string(status, sizeof(status), "save failed");
+        return 0;
     }
+    copy_string(status, sizeof(status), "save failed");
+    return -BS_EIO;
+}
+
+static int notes_unsaved(void)
+{
+    return modified;
 }
 
 static void notes_open_request(const char *file)
@@ -119,13 +125,17 @@ static void notes_draw(int w, int h, int focused)
     visible_lines = (h - BAR_H - PAD * 2) / LINE_H;
     visible_columns = (w - PAD * 2) / CHAR_W;
 
-    gfx_button(4, 3, 36, 14, "Save", 0);
+    gfx_gradient(0, 0, w, BAR_H, LIGHTER(theme->window, 120), DARKER(theme->window, 30));
+    gfx_button(4, 3, 36, 14, "Save", modified);
     gfx_button(44, 3, 36, 14, "New", 0);
     gfx_text_n(86, 7, path, (w - 92) / CHAR_W - 2, theme->text);
     if (modified)
         gfx_text(w - 10, 7, "*", app_notes.accent);
-    gfx_fill(0, BAR_H, w, 1, theme->line);
-    gfx_fill(0, BAR_H + 1, w, h - BAR_H - 1, theme->field);
+    gfx_fill(0, BAR_H, w, 2, INK);
+    gfx_fill(0, BAR_H + 2, w, h - BAR_H - 2, 0xFFFEF6);
+    for (int rule = BAR_H + PAD + LINE_H - 1; rule < h; rule += LINE_H) /* the rules sit under each line */
+        gfx_fill(0, rule, w, 1, 0xCFE0EE);
+    gfx_fill(PAD - 3, BAR_H + 2, 1, h - BAR_H - 2, 0xF0A8A0); /* the margin */
 
     for (int i = 0; i <= length; i++) {
         int on_screen = line >= top_line && line < top_line + visible_lines;
@@ -241,7 +251,8 @@ static void notes_press(int x, int y, int w, int h)
 }
 
 const struct app app_notes = {
-    .name = "Notes", .blurb = "edit text", .accent = 0x5C8DEB,
+    .name = "Notes", .blurb = "edit text", .accent = 0x3F78D8, .icon = ICON_NOTES,
+    .unsaved = notes_unsaved, .save = save,
     .default_w = 380, .default_h = 260, .min_w = 180, .min_h = 90,
     .open = notes_open_request, .draw = notes_draw, .key = notes_key, .press = notes_press,
 };

@@ -1,9 +1,9 @@
 /* Files: browse folders and open files with whatever handles them. */
 #include "bs.h"
-#include "desk.h"
+#include "bdeskui.h"
 
 #define MAX_ENTRIES 160
-#define ROW_H 13
+#define ROW_H 18
 #define BAR_H 20
 #define DOUBLE_CLICK_FRAMES 20
 
@@ -74,7 +74,7 @@ static void open_entry(int index)
         copy_string(url + 5, sizeof(url) - 5, target);
         argv[0] = "web";
         argv[1] = url;
-        desk_run_fullscreen(2, argv);
+        bdeskui_run_program(2, argv);
     } else {
         notes_open(target);
     }
@@ -82,7 +82,7 @@ static void open_entry(int index)
 
 static void files_open(const char *arg)
 {
-    if (load(arg ? arg : path[0] ? path : desk_home()) < 0)
+    if (load(arg ? arg : path[0] ? path : bdeskui_home()) < 0)
         load("/");
 }
 
@@ -96,20 +96,25 @@ static void files_draw(int w, int h, int focused)
     int rows = visible_rows(h);
 
     (void)focused;
+    gfx_gradient(0, 0, w, BAR_H, LIGHTER(theme->window, 120), DARKER(theme->window, 30));
     gfx_button(4, 3, 30, 14, "Up", 0);
     gfx_button(38, 3, 40, 14, "Open", 0);
-    gfx_text_n(84, 7, path, (w - 90) / CHAR_W, theme->text);
-    gfx_fill(0, BAR_H, w, 1, theme->line);
+    gfx_inset(85, 4, w - 92, 12, theme->field);
+    gfx_text_n(88, 7, path, (w - 98) / CHAR_W, theme->text);
+    gfx_fill(0, BAR_H, w, 2, INK);
 
     for (int i = 0; i < rows && scroll + i < entry_count; i++) {
         const struct bs_dirent *e = &entries[scroll + i];
         int y = BAR_H + 3 + i * ROW_H;
-        unsigned int mark = e->type == BS_TYPE_DIR ? app_files.accent : e->type == BS_TYPE_SYMLINK ? 0x56C2D6 : theme->dim;
+        enum icon icon = e->type == BS_TYPE_DIR || e->type == BS_TYPE_SYMLINK ? ICON_FOLDER
+                         : ends_with(e->name, ".bs")                         ? ICON_PROGRAM
+                                                                             : ICON_FILE;
 
         if (scroll + i == selected)
-            gfx_fill(0, y - 2, w, ROW_H, theme->select);
-        gfx_fill(6, y + 1, 6, 6, mark); /* type: folder, link or file */
-        gfx_text_n(18, y, e->name, (w - 100) / CHAR_W, theme->text);
+            gfx_gel(2, y - 1, w - 4, ROW_H, 0x46B8F0, 0);
+        gfx_icon(6, y, icon, 1);
+        gfx_text_n(26, y + 5, e->name, (w - 108) / CHAR_W, theme->text);
+        y += 5;
         if (e->type == BS_TYPE_FILE) {
             char size[16];
             unsigned int v = e->size, n = 15;
@@ -180,7 +185,7 @@ static void files_key(int key)
 }
 
 const struct app app_files = {
-    .name = "Files", .blurb = "browse files", .accent = 0xE8A33A,
+    .name = "Files", .blurb = "browse files", .accent = 0xE08A1E, .icon = ICON_FILES,
     .default_w = 330, .default_h = 260, .min_w = 200, .min_h = 100,
     .open = files_open, .draw = files_draw, .key = files_key, .press = files_press,
 };

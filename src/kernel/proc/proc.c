@@ -188,6 +188,9 @@ int proc_run(const char *path, int argc, char *const *argv)
             if (*p == '/')
                 base = p + 1;
         strlcpy_checked(child->name, base, sizeof(child->name)); /* truncated is fine */
+        for (char *dot = child->name; *dot; dot++)
+            if (dot[0] == '.' && dot[1] == 'b' && dot[2] == 's' && !dot[3])
+                *dot = 0; /* "bsh", not "bsh.bs" */
     }
     if (parent) {
         child->user = parent->user;

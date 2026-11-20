@@ -1,16 +1,17 @@
 /*
- * Terminal: runs BShitOS programs. A program's console output is captured and
- * shown here; programs listed as full-screen get the whole display instead.
+ * Terminal: runs command lines through bsh (so globs, quotes, && and $VARS all
+ * work), captures what they print and shows it here. cd, pwd and clear are
+ * handled here, as they change this window. Programs that need the screen or
+ * the TTY get it (see /conf/bdeskui.conf).
  */
-#include "bs.h"
-#include "desk.h"
+#include "bdeskui.h"
 
 #define LINES_MAX 400
 #define LINE_MAX 104
 #define INPUT_MAX 120
 #define HISTORY_MAX 16
 #define ARGS_MAX 16
-#define PAD 4
+#define PAD 8
 
 static char lines[LINES_MAX][LINE_MAX];
 static unsigned char line_colors[LINES_MAX];
@@ -38,13 +39,15 @@ static void add_line(const char *text, int color)
     scroll_back = 0;
 }
 
+#define SCREEN_BG 0x0C171Cu
+
 static unsigned int color_of(int kind)
 {
     switch (kind) {
-    case COLOR_PROMPT: return app_terminal.accent;
-    case COLOR_ERROR: return 0xE0564A;
-    case COLOR_NOTE: return theme->dim;
-    default: return theme->text;
+    case COLOR_PROMPT: return 0x8CE87C;
+    case COLOR_ERROR: return 0xFF7A6E;
+    case COLOR_NOTE: return 0x86A0AC;
+    default: return 0xD6E4EA;
     }
 }
 
@@ -98,7 +101,7 @@ static void run_line(const char *command)
         return;
 
     if (strcmp(argv[0], "cd") == 0) {
-        int rc = chdir(argc > 1 ? argv[1] : desk_home());
+        int rc = chdir(argc > 1 ? argv[1] : bdeskui_home());
 
         if (rc < 0)
             add_line(strerror(rc), COLOR_ERROR);
@@ -107,31 +110,24 @@ static void run_line(const char *command)
     } else if (strcmp(argv[0], "clear") == 0) {
         line_count = 0;
     } else if (strcmp(argv[0], "help") == 0) {
-        add_line("Type any BShitOS command: ls, cat, cp, mv, rm, mkdir, write, net, ping, date...", COLOR_NOTE);
-        add_line("Full-screen programs (edit, web, cube) take over the display until they exit.", COLOR_NOTE);
-        add_line("cd, pwd and clear work here too. PgUp/PgDn scroll.", COLOR_NOTE);
-    } else if (desk_is_fullscreen(argv[0])) {
-        desk_run_fullscreen(argc, argv);
-        add_line("(back from full screen)", COLOR_NOTE);
+        add_line("bsh command lines run here: ls *.txt, cat x && echo ok, echo $HOME ...", COLOR_NOTE);
+        add_line("web, cube and edit take the screen; su, passwd and install use the TTY.", COLOR_NOTE);
+        add_line("cd, pwd and clear act on this window. PgUp/PgDn scroll. 'help' in bsh: bsh -c help", COLOR_NOTE);
+    } else if (bdeskui_needs_screen(argv[0]) || bdeskui_needs_tty(argv[0])) {
+        bdeskui_run_program(argc, argv);
+        add_line("(back in BDeskUI)", COLOR_NOTE);
     } else {
-        char path[BS_PATH_MAX];
+        char *shell_argv[3] = {"bsh", "-c", (char *)command};
         int code;
 
-        if (strchr(argv[0], '/')) {
-            copy_string(path, sizeof(path), argv[0]);
-        } else {
-            copy_string(path, sizeof(path), "/bin/");
-            copy_string(path + 5, sizeof(path) - 5, argv[0]);
-            copy_string(path + strlen(path), sizeof(path) - strlen(path), ".bs");
-        }
         console_clear();
-        code = spawn(path, argc, argv);
+        code = spawn("/bin/bsh.bs", 3, shell_argv);
         capture_console();
         console_clear();
-        if (code == -BS_ENOENT)
-            add_line("command not found (try 'help')", COLOR_ERROR);
-        else if (code < 0)
+        if (code < 0)
             add_line(strerror(code), COLOR_ERROR);
+        else if (code == BS_EXIT_STOPPED)
+            add_line("(stopped for the shutdown)", COLOR_NOTE);
     }
 }
 
@@ -150,7 +146,7 @@ static void remember(const char *command)
 static void terminal_open(const char *arg)
 {
     if (!welcomed) {
-        add_line("BShitOS terminal. Type 'help' for what works here.", COLOR_NOTE);
+        add_line("bsh, inside BDeskUI. 'help' says what works here.", COLOR_NOTE);
         welcomed = 1;
     }
     if (arg)
@@ -170,7 +166,7 @@ static void terminal_draw(int w, int h, int focused)
     char cwd[BS_PATH_MAX], prompt[BS_PATH_MAX + 4];
     int prompt_length, y;
 
-    gfx_fill(0, 0, w, h, theme->field);
+    gfx_inset(3, 3, w - 6, h - 6, SCREEN_BG);
     if (first < 0)
         first = 0;
     for (int i = 0; i < visible && first + i < line_count; i++)
@@ -181,13 +177,13 @@ static void terminal_draw(int w, int h, int focused)
     copy_string(prompt + strlen(prompt), sizeof(prompt) - strlen(prompt), "$ ");
     prompt_length = (int)strlen(prompt);
     y = h - PAD - LINE_H + 1;
-    gfx_fill(0, y - 3, w, 1, theme->line);
-    gfx_text_n(PAD, y, prompt, columns, app_terminal.accent);
-    gfx_text_n(PAD + prompt_length * CHAR_W, y, input, columns - prompt_length, theme->text);
-    if (focused && wm_frame() / 25 % 2 == 0)
-        gfx_fill(PAD + (prompt_length + cursor) * CHAR_W, y - 1, 1, 9, theme->text);
+    gfx_fill(4, y - 4, w - 8, 1, 0x2A3E48);
+    if (focused && wm_frame() / 25 % 2 == 0) /* a block caret, under the text */
+        gfx_fill(PAD + (prompt_length + cursor) * CHAR_W - 1, y - 1, 7, 9, 0x2F7A3A);
+    gfx_text_n(PAD, y, prompt, columns, color_of(COLOR_PROMPT));
+    gfx_text_n(PAD + prompt_length * CHAR_W, y, input, columns - prompt_length, color_of(COLOR_NORMAL));
     if (scroll_back)
-        gfx_text(w - 14 * CHAR_W, PAD, "[scrolled up]", theme->dim);
+        gfx_text(w - 15 * CHAR_W, PAD, "[scrolled up]", color_of(COLOR_NOTE));
 }
 
 static void terminal_key(int key)
@@ -247,7 +243,7 @@ static void terminal_key(int key)
 }
 
 const struct app app_terminal = {
-    .name = "Terminal", .blurb = "run programs", .accent = 0x6CC56C,
+    .name = "Terminal", .blurb = "run programs", .accent = 0x3E9E4E, .icon = ICON_TERMINAL,
     .default_w = 430, .default_h = 250, .min_w = 200, .min_h = 80,
     .open = terminal_open, .draw = terminal_draw, .key = terminal_key,
 };

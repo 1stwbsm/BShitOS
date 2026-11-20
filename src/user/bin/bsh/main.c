@@ -10,6 +10,7 @@
 #define CONF_PATH "/conf/bsh.conf"
 #define MOTD_PATH "/conf/motd"
 #define SYSTEM_RC "/conf/bshrc"
+#define AUTOEXEC "/conf/autoexec.bsh"
 #define DEFAULT_PROMPT "%u %{93}%d%{0}%?%t %{1}>>%{0} "
 
 static unsigned int last_took;
@@ -206,6 +207,13 @@ int main(int argc, char **argv)
     }
     last_status = 0;
     history_load();
+    /* A login shell runs autoexec, which starts BDeskUI. An exit in it ends the session. */
+    if (argv[0][0] == '-') {
+        run_rc(AUTOEXEC);
+        if (run_script_exited())
+            return last_status;
+        last_status = 0;
+    }
 
     while (!exit_requested() && !shutting_down()) {
         unsigned int started;

@@ -50,6 +50,7 @@ const char *alias_name(int i); /* 0 past the end */
 extern int last_status;
 int run_line(const char *line);
 int run_script(const char *path, int argc, char **argv);
+int run_script_exited(void); /* whether the last script ended with exit */
 int find_program(const char *name, char *path, unsigned int size); /* 0 if found */
 void set_positional(int argc, char **argv);
 int exit_requested(void);
