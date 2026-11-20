@@ -181,7 +181,7 @@ static void system_draw(int w, int h, int focused)
 }
 
 const struct app app_system = {
-    .name = "System", .blurb = "machine status", .accent = 0x9A5ACB, .icon = ICON_SYSTEM,
+    .name = "BSsys", .blurb = "machine status", .accent = 0x9A5ACB, .icon = ICON_SYSTEM,
     .default_w = 330, .default_h = 230, .min_w = 260, .min_h = 150,
     .draw = system_draw, .tick = system_tick,
 };

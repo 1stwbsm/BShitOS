@@ -243,7 +243,7 @@ static void terminal_key(int key)
 }
 
 const struct app app_terminal = {
-    .name = "Terminal", .blurb = "run programs", .accent = 0x3E9E4E, .icon = ICON_TERMINAL,
+    .name = "BSterm", .blurb = "run programs", .accent = 0x3E9E4E, .icon = ICON_TERMINAL,
     .default_w = 430, .default_h = 250, .min_w = 200, .min_h = 80,
     .open = terminal_open, .draw = terminal_draw, .key = terminal_key,
 };

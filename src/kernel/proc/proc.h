@@ -18,7 +18,7 @@ struct file {
 
 struct proc {
     int used;
-    uint32_t tables[2]; /* page tables for the user window, filled on demand */
+    uint32_t tables[BS_USER_SLOTS]; /* page tables for the user window, made on demand */
     uint32_t ksp;
     char cwd[BS_PATH_MAX];
     struct file files[PROC_MAX_FILES];

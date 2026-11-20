@@ -23,9 +23,9 @@ extern struct tss kernel_tss;
 void gdt_init(void);
 void idt_init(void);
 void paging_init(void);
-/* The user window: a process's two page tables (each covers 4 MiB), or 0, 0. */
-void paging_use_tables(uint32_t table0, uint32_t table1);
-void paging_free_user(uint32_t table0, uint32_t table1);
+/* The user window: a process's table addresses (BS_USER_SLOTS of them), or 0. */
+void paging_use_tables(uint32_t *tables);
+void paging_free_user(uint32_t *tables);
 /* Maps the page behind a fault if it should exist; 0 if fixed. */
 int paging_fault(uint32_t address);
 

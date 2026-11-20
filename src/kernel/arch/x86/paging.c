@@ -3,7 +3,7 @@
  * with 4 MiB pages where the CPU has them (Pentium and newer), else with 4 KiB
  * page tables covering RAM, plus device memory mapped the first time the kernel
  * touches it. The user window (BS_USER_BASE..BS_USER_TOP) belongs to the
- * running process: two page tables of its own, filled in as pages are touched.
+ * running process: page tables of its own, made and filled as pages are touched.
  */
 #include <bshit/syscall.h>
 
@@ -23,7 +23,7 @@
 #define USER_SLOT   (BS_USER_BASE >> 22)
 
 static uint32_t page_directory[ENTRIES] __attribute__((aligned(4096)));
-static uint32_t *user_tables[2];
+static uint32_t *user_tables; /* the running process's BS_USER_SLOTS table addresses */
 
 static void reload_cr3(void)
 {
@@ -64,13 +64,13 @@ void paging_init(void)
     __asm__ volatile("mov %0, %%cr0" : : "r"(value | CR0_PG));
 }
 
-/* Points the user window at a process's two page tables (0 to unmap). */
-void paging_use_tables(uint32_t table0, uint32_t table1)
+/* Points the user window at a process's tables (0 for none: kernel only). */
+void paging_use_tables(uint32_t *tables)
 {
-    user_tables[0] = (uint32_t *)table0;
-    user_tables[1] = (uint32_t *)table1;
-    page_directory[USER_SLOT] = table0 ? table0 | PTE_PRESENT | PTE_WRITE | PTE_USER : 0;
-    page_directory[USER_SLOT + 1] = table1 ? table1 | PTE_PRESENT | PTE_WRITE | PTE_USER : 0;
+    user_tables = tables;
+    for (uint32_t slot = 0; slot < BS_USER_SLOTS; slot++)
+        page_directory[USER_SLOT + slot] =
+            tables && tables[slot] ? tables[slot] | PTE_PRESENT | PTE_WRITE | PTE_USER : 0;
     reload_cr3();
 }
 
@@ -80,10 +80,21 @@ void paging_use_tables(uint32_t table0, uint32_t table1)
  */
 int paging_fault(uint32_t address)
 {
-    if (address >= BS_USER_BASE && address < BS_USER_TOP && user_tables[0]) {
-        uint32_t index = (address - BS_USER_BASE) >> 12;
-        uint32_t *entry = &user_tables[index / ENTRIES][index % ENTRIES];
-        uint32_t page;
+    if (address >= BS_USER_BASE && address < BS_USER_TOP && user_tables) {
+        uint32_t index = (address - BS_USER_BASE) >> 12, slot = index / ENTRIES;
+        uint32_t *entry, page;
+
+        if (!user_tables[slot]) { /* first touch in this 4 MiB: a table for it */
+            uint32_t table = page_alloc();
+
+            if (!table)
+                return -1;
+            memset((void *)table, 0, PAGE_SIZE);
+            user_tables[slot] = table;
+            page_directory[USER_SLOT + slot] = table | PTE_PRESENT | PTE_WRITE | PTE_USER;
+            reload_cr3();
+        }
+        entry = &((uint32_t *)user_tables[slot])[index % ENTRIES];
 
         if (*entry & PTE_PRESENT)
             return -1; /* present already: a protection fault */
@@ -94,24 +105,24 @@ int paging_fault(uint32_t address)
         *entry = page | PTE_PRESENT | PTE_WRITE | PTE_USER;
         return 0;
     }
-    if (!cpu.has_pse && !page_directory[address >> 22] && (address >> 22) != USER_SLOT &&
-        (address >> 22) != USER_SLOT + 1)
+    if (!cpu.has_pse && !page_directory[address >> 22] &&
+        ((address >> 22) < USER_SLOT || (address >> 22) >= USER_SLOT + BS_USER_SLOTS))
         return map_identity_region(address >> 22) == 0 ? 0 : -1;
     return -1;
 }
 
-/* Frees every page a process's tables point at. The tables stay. */
-void paging_free_user(uint32_t table0, uint32_t table1)
+/* Frees a process's pages and its tables. */
+void paging_free_user(uint32_t *tables)
 {
-    uint32_t *tables[2] = {(uint32_t *)table0, (uint32_t *)table1};
+    for (uint32_t slot = 0; slot < BS_USER_SLOTS; slot++) {
+        uint32_t *table = (uint32_t *)tables[slot];
 
-    for (int t = 0; t < 2; t++) {
-        if (!tables[t])
+        if (!table)
             continue;
-        for (uint32_t i = 0; i < ENTRIES; i++) {
-            if (tables[t][i] & PTE_PRESENT)
-                page_free(tables[t][i] & ~(PAGE_SIZE - 1));
-            tables[t][i] = 0;
-        }
+        for (uint32_t i = 0; i < ENTRIES; i++)
+            if (table[i] & PTE_PRESENT)
+                page_free(table[i] & ~(PAGE_SIZE - 1));
+        page_free(tables[slot]);
+        tables[slot] = 0;
     }
 }

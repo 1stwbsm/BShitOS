@@ -1,30 +1,31 @@
 /*
  * The window manager. Windows overlap and can be moved, resized, minimised,
- * maximised and closed. Desktop icons and the launch menu start apps; the
- * taskbar holds the launch button, a button per window, and the tray.
+ * maximised and closed. Desktop icons and the launch menu (the B) start apps;
+ * the taskbar has a button per window, each with its own maximise and close.
  */
 #include "bdeskui.h"
 
 #define MAX_WINDOWS 8
-#define FRAME 2
-#define TITLE_H 18
-#define SEP 2
-#define BUTTON 14
+#define FRAME 6         /* outline (2) plus a chrome margin around the content */
+#define TITLE_H 24
+#define SEP 2           /* the rule under the title bar */
+#define TITLE_BUTTON 24 /* V, ^ and X segments, each the full title bar tall */
 #define GRIP 10
-#define CASCADE_STEP 20
-#define LAUNCH_W 50
-#define TASK_W 104
-#define TRAY_W 150
-#define MENU_W 252
-#define MENU_ROW 22
-#define MENU_HEAD 28
+#define CASCADE_STEP 22
+#define B_SIZE 32
+#define TASK_NAME_MAX 92
+#define TASK_BUTTON 22
+#define TRAY_W 120
+#define MENU_W 260
+#define MENU_ROW 24
+#define MENU_HEAD 30
 #define RUN_H 22
-#define POWER_H 22
-#define ICON_SLOT 52
+#define POWER_H 24
+#define TILE 48
+#define ICON_PITCH_X 70
+#define ICON_PITCH_Y 66
 #define DOUBLE_CLICK_FRAMES 20
 #define COMMAND_MAX 128
-#define TASK_BASE 0x6E8FA2u
-#define TASK_ACTIVE 0xA8DCF4u
 
 struct window {
     const struct app *app;
@@ -41,13 +42,13 @@ struct launcher {
 };
 
 static const struct launcher launchers[] = {
-    {"Terminal", "run programs with bsh", ICON_TERMINAL, &app_terminal, 0},
-    {"Files", "browse and open files", ICON_FILES, &app_files, 0},
-    {"Notes", "write and edit text", ICON_NOTES, &app_notes, 0},
-    {"Web", "browse (takes the screen)", ICON_WEB, 0, "web"},
-    {"System", "memory, disk, network", ICON_SYSTEM, &app_system, 0},
-    {"Settings", "skin and mouse speed", ICON_SETTINGS, &app_settings, 0},
-    {"Cube", "spins (takes the screen)", ICON_CUBE, 0, "cube"},
+    {"BSfile", "browse and open files", ICON_FILES, &app_files, 0},
+    {"BSterm", "run programs with bsh", ICON_TERMINAL, &app_terminal, 0},
+    {"BSnote", "write and edit text", ICON_NOTES, &app_notes, 0},
+    {"BSweb", "browse (takes the screen)", ICON_WEB, 0, "web"},
+    {"BSsys", "memory, disk, network", ICON_SYSTEM, &app_system, 0},
+    {"BSconf", "skin, mouse, login", ICON_SETTINGS, &app_settings, 0},
+    {"BScube", "spins (takes the screen)", ICON_CUBE, 0, "cube"},
 };
 #define LAUNCHER_COUNT ((int)(sizeof(launchers) / sizeof(launchers[0])))
 
@@ -57,10 +58,10 @@ static const struct {
     enum action action;
     unsigned int color;
 } power_buttons[] = {
-    {"shutdown", ACTION_POWEROFF, 0xE2412F},
-    {"restart", ACTION_RESTART, 0xF0A030},
-    {"log out", ACTION_LOGOUT, 0x6FA8D8},
-    {"to TTY", ACTION_TTY, 0xB8C4CC},
+    {"shutdown", ACTION_POWEROFF, 0xC8382A},
+    {"restart", ACTION_RESTART, 0xD88A20},
+    {"log out", ACTION_LOGOUT, 0x4C80B8},
+    {"to TTY", ACTION_TTY, 0x6A747C},
 };
 #define POWER_COUNT 4
 
@@ -87,6 +88,7 @@ static struct {
 } dialog;
 static enum action leaving;
 static unsigned int shutdown_started_at;
+static int closing = -1;
 
 int wm_frame(void)
 {
@@ -128,23 +130,25 @@ static void raise_window(int index)
     windows[window_count - 1].minimized = 0;
 }
 
-/* ---- Window geometry: a frame around a title bar, a black rule, and content -- */
+/* ---- Window geometry: a framed box, the title bar on top, a rule, the content -- */
 
 static int outer_left(const struct window *w) { return w->x - FRAME; }
-static int outer_top(const struct window *w) { return w->y - SEP - TITLE_H - FRAME; }
+static int outer_top(const struct window *w) { return w->y - SEP - TITLE_H - 2; }
 static int outer_width(const struct window *w) { return w->w + 2 * FRAME; }
-static int outer_height(const struct window *w) { return w->h + TITLE_H + SEP + 2 * FRAME; }
+static int outer_height(const struct window *w) { return w->h + TITLE_H + SEP + 2 + FRAME; }
 static int title_top(const struct window *w) { return w->y - SEP - TITLE_H; }
+static int title_left(const struct window *w) { return w->x - FRAME + 2; }
+static int title_width(const struct window *w) { return w->w + 2 * FRAME - 4; }
 
-/* 0 minimise, 1 maximise, 2 close */
+/* 0 minimise (V), 1 maximise (^), 2 close (X) */
 static int button_x(const struct window *w, int which)
 {
-    return w->x + w->w - (3 - which) * (BUTTON + 3) - 1;
+    return title_left(w) + title_width(w) - (3 - which) * TITLE_BUTTON;
 }
 
 static void clamp(struct window *w)
 {
-    int top_min = FRAME + TITLE_H + SEP;
+    int top_min = 2 + TITLE_H + SEP;
 
     if (w->w > SCREEN_W - 2 * FRAME)
         w->w = SCREEN_W - 2 * FRAME;
@@ -174,8 +178,8 @@ void wm_open(const struct app *app, const char *arg)
         w->app = app;
         w->w = app->default_w;
         w->h = app->default_h;
-        w->x = 96 + cascade * CASCADE_STEP;
-        w->y = FRAME + TITLE_H + SEP + 14 + cascade * CASCADE_STEP;
+        w->x = SCREEN_W / 3 + cascade * CASCADE_STEP - 60;
+        w->y = 2 + TITLE_H + SEP + 18 + cascade * CASCADE_STEP;
         cascade = (cascade + 1) % 6;
         clamp(w);
     } else {
@@ -206,7 +210,7 @@ static void toggle_maximize(struct window *w)
         w->saved_w = w->w;
         w->saved_h = w->h;
         w->x = FRAME;
-        w->y = FRAME + TITLE_H + SEP;
+        w->y = 2 + TITLE_H + SEP;
         w->w = SCREEN_W - 2 * FRAME;
         w->h = work_bottom() - w->y - FRAME;
         w->maximized = 1;
@@ -230,41 +234,11 @@ static void ask(const char *title, const char *message, const char *a, const cha
 }
 
 static void continue_leaving(void);
-static int closing = -1;
 
-static void save_failed_answer(int choice)
+static void unsaved_message(int index, char *out, unsigned int size)
 {
-    if (choice == 0)
-        continue_leaving(); /* leave anyway: that window is marked discarded */
-    else
-        leaving = ACTION_NONE;
-}
-
-/* Closing one window that has unsaved work. */
-static void close_answer(int choice)
-{
-    int index = closing;
-
-    closing = -1;
-    if (index < 0 || index >= window_count || choice == 2)
-        return;
-    if (choice == 0 && windows[index].app->save && windows[index].app->save() < 0)
-        return; /* the app shows why it could not save; the window stays */
-    close_window(index);
-}
-
-static void request_close(int index)
-{
-    if (windows[index].app->unsaved && windows[index].app->unsaved()) {
-        char message[80];
-
-        closing = index;
-        copy_string(message, sizeof(message), windows[index].app->name);
-        copy_string(message + strlen(message), sizeof(message) - strlen(message), " has unsaved changes.");
-        ask("Close", message, "save", "discard", "cancel", close_answer);
-        return;
-    }
-    close_window(index);
+    copy_string(out, size, windows[index].app->name);
+    copy_string(out + strlen(out), size - strlen(out), " has unsaved changes.");
 }
 
 static int unsaved_window(void)
@@ -275,26 +249,33 @@ static int unsaved_window(void)
     return -1;
 }
 
+static void save_failed_answer(int choice)
+{
+    if (choice == 0)
+        continue_leaving(); /* leave anyway: that window is marked discarded */
+    else
+        leaving = ACTION_NONE;
+}
+
 static void unsaved_answer(int choice)
 {
     int index = unsaved_window();
 
-    dialog.open = 0;
     if (index < 0)
         return;
-    if (choice == 0 && windows[index].app->save) { /* save */
+    if (choice == 0 && windows[index].app->save) {
         if (windows[index].app->save() < 0) {
             char message[80];
 
             copy_string(message, sizeof(message), windows[index].app->name);
             copy_string(message + strlen(message), sizeof(message) - strlen(message), " could not save. leave anyway?");
-            windows[index].discarded = 1; /* asked once; the next answer decides */
+            windows[index].discarded = 1;
             ask("Save failed", message, "leave", leaving == ACTION_SHUTDOWN ? 0 : "stay", 0, save_failed_answer);
             return;
         }
-    } else if (choice == 1) { /* discard */
+    } else if (choice == 1) {
         windows[index].discarded = 1;
-    } else { /* cancel */
+    } else {
         leaving = ACTION_NONE;
         return;
     }
@@ -308,8 +289,7 @@ static void continue_leaving(void)
     if (index >= 0) {
         char message[80];
 
-        copy_string(message, sizeof(message), windows[index].app->name);
-        copy_string(message + strlen(message), sizeof(message) - strlen(message), " has unsaved changes.");
+        unsaved_message(index, message, sizeof(message));
         ask("Unsaved work", message, "save", "discard", leaving == ACTION_SHUTDOWN ? 0 : "cancel", unsaved_answer);
         return;
     }
@@ -359,6 +339,32 @@ void wm_shutdown_started(void)
     leave(ACTION_SHUTDOWN);
 }
 
+/* Closing one window that has unsaved work. */
+static void close_answer(int choice)
+{
+    int index = closing;
+
+    closing = -1;
+    if (index < 0 || index >= window_count || choice == 2)
+        return;
+    if (choice == 0 && windows[index].app->save && windows[index].app->save() < 0)
+        return; /* the app shows why it could not save; the window stays */
+    close_window(index);
+}
+
+static void request_close(int index)
+{
+    if (windows[index].app->unsaved && windows[index].app->unsaved()) {
+        char message[80];
+
+        closing = index;
+        unsaved_message(index, message, sizeof(message));
+        ask("Close", message, "save", "discard", "cancel", close_answer);
+        return;
+    }
+    close_window(index);
+}
+
 static void dialog_key(int key)
 {
     if (key == BS_KEY_LEFT && dialog.hot > 0)
@@ -376,15 +382,15 @@ static void dialog_key(int key)
     }
 }
 
-#define DIALOG_W 300
-#define DIALOG_H 104
+#define DIALOG_W 320
+#define DIALOG_H 120
 
 static int dialog_x(void) { return (SCREEN_W - DIALOG_W) / 2; }
 static int dialog_y(void) { return (work_bottom() - DIALOG_H) / 2; }
 
 static int dialog_button_x(int i)
 {
-    int width = 70, gap = 8, total = dialog.count * width + (dialog.count - 1) * gap;
+    int width = 72, gap = 8, total = dialog.count * width + (dialog.count - 1) * gap;
 
     return dialog_x() + DIALOG_W - 14 - total + i * (width + gap);
 }
@@ -392,7 +398,7 @@ static int dialog_button_x(int i)
 static void dialog_press(int x, int y)
 {
     for (int i = 0; i < dialog.count; i++) {
-        if (gfx_inside(x, y, dialog_button_x(i), dialog_y() + DIALOG_H - 30, 70, 20)) {
+        if (gfx_inside(x, y, dialog_button_x(i), dialog_y() + DIALOG_H - 32, 72, 22)) {
             dialog.hot = i;
             dialog_key('\n');
             return;
@@ -407,35 +413,36 @@ static void draw_dialog(void)
     gfx_unclip();
     gfx_darken(0, 0, SCREEN_W, SCREEN_H, 90); /* everything else waits */
     gfx_shadow(x, y, DIALOG_W, DIALOG_H);
+    gfx_fill(x, y, DIALOG_W, DIALOG_H, theme->chrome);
+    gfx_chrome(x + 2, y + 2, DIALOG_W - 4, TITLE_H, theme->chrome, 0);
+    gfx_text_scaled(x + 9, y + 7, dialog.title, 2, theme->accent);
+    gfx_fill(x, y + 2 + TITLE_H, DIALOG_W, SEP, theme->line);
     gfx_frame(x, y, DIALOG_W, DIALOG_H);
-    gfx_gel(x + 2, y + 2, DIALOG_W - 4, TITLE_H, 0xF0A030, 0);
-    gfx_text_raised(x + 10, y + 8, dialog.title, 0xFFFFFF);
-    gfx_fill(x + 2, y + 2 + TITLE_H, DIALOG_W - 4, SEP, INK);
-    gfx_fill(x + 2, y + 4 + TITLE_H, DIALOG_W - 4, DIALOG_H - 6 - TITLE_H, theme->window);
-    gfx_icon(x + 12, y + 32, ICON_POWER, 2);
-    gfx_text_n(x + 54, y + 36, dialog.message, (DIALOG_W - 64) / CHAR_W, theme->text);
+    gfx_fill(x + 6, y + 6 + TITLE_H, DIALOG_W - 12, DIALOG_H - 12 - TITLE_H, theme->window);
+    gfx_icon(x + 14, y + 38, ICON_POWER, 2);
+    gfx_text_n(x + 56, y + 42, dialog.message, (DIALOG_W - 66) / CHAR_W, theme->text);
     if (leaving == ACTION_SHUTDOWN) {
         struct bs_sysinfo info;
         char line[40] = "shutting down: ";
-        unsigned int used, n = strlen(line);
+        unsigned int used, left, n = strlen(line);
 
         sysinfo(&info);
         used = info.uptime_seconds - shutdown_started_at;
-        line[n++] = (char)('0' + (used < 15 ? 15 - used : 0) / 10);
-        line[n++] = (char)('0' + (used < 15 ? 15 - used : 0) % 10);
+        left = used < 15 ? 15 - used : 0;
+        line[n++] = (char)('0' + left / 10);
+        line[n++] = (char)('0' + left % 10);
         copy_string(line + n, sizeof(line) - n, " s left");
-        gfx_text(x + 54, y + 50, line, theme->dim);
+        gfx_text(x + 56, y + 56, line, theme->dim);
     }
-    for (int i = 0; i < dialog.count; i++) {
-        gfx_button(dialog_button_x(i), y + DIALOG_H - 30, 70, 20, dialog.buttons[i], i == dialog.hot);
-    }
+    for (int i = 0; i < dialog.count; i++)
+        gfx_button(dialog_button_x(i), y + DIALOG_H - 32, 72, 22, dialog.buttons[i], i == dialog.hot);
 }
 
-/* ---- The launch menu ----------------------------------------------------------- */
+/* ---- The launch menu, opened by the B ------------------------------------------ */
 
 static int menu_height(void)
 {
-    return MENU_HEAD + LAUNCHER_COUNT * MENU_ROW + RUN_H + POWER_H + 18;
+    return MENU_HEAD + LAUNCHER_COUNT * MENU_ROW + RUN_H + POWER_H + 20;
 }
 
 static int menu_top(void)
@@ -489,78 +496,94 @@ static void menu_key(int key)
     }
 }
 
+static int power_button_width(void)
+{
+    return (MENU_W - 12 - 3 * 4) / POWER_COUNT;
+}
+
 static int power_button_x(int i)
 {
-    return 6 + i * ((MENU_W - 12 - 3 * 4) / POWER_COUNT + 4);
+    return 4 + 6 + i * (power_button_width() + 4);
+}
+
+static int power_y(void)
+{
+    return menu_top() + MENU_HEAD + 4 + LAUNCHER_COUNT * MENU_ROW + RUN_H + 4;
 }
 
 static void draw_menu(int mouse_x, int mouse_y)
 {
-    int top = menu_top(), x = 2, y;
-    int button_w = (MENU_W - 12 - 3 * 4) / POWER_COUNT;
+    int top = menu_top(), x = 4, y;
 
     gfx_unclip();
     gfx_shadow(x, top, MENU_W, menu_height());
-    gfx_frame(x, top, MENU_W, menu_height());
-    gfx_glass(x + 2, top + 2, MENU_W - 4, menu_height() - 4, LIGHTER(theme->glass_top, 40), theme->glass_bottom);
-
-    /* who is logged in */
-    gfx_gel(x + 2, top + 2, MENU_W - 4, MENU_HEAD - 4, theme->accent, 0);
-    gfx_text_raised(x + 10, top + 9, bdeskui_user(), 0xFFFFFF);
-    gfx_text(x + MENU_W - 13 * CHAR_W - 8, top + 10, "BDeskUI/BShit", DARKER(theme->accent, 150));
-    gfx_fill(x + 2, top + MENU_HEAD - 2, MENU_W - 4, 2, INK);
+    gfx_chrome(x, top, MENU_W, menu_height(), theme->chrome, 0);
+    gfx_text_scaled(x + 10, top + 8, bdeskui_user(), 2, theme->accent);
+    gfx_text(x + MENU_W - 13 * CHAR_W - 8, top + 12, "BDeskUI/BShit", theme->idle);
+    gfx_fill(x, top + MENU_HEAD - 2, MENU_W, 2, theme->line);
 
     for (int i = 0; i < LAUNCHER_COUNT; i++) {
         int row = top + MENU_HEAD + 2 + i * MENU_ROW;
         int hot = i == menu_selected || gfx_inside(mouse_x, mouse_y, x, row, MENU_W, MENU_ROW);
 
         if (hot)
-            gfx_gel(x + 4, row, MENU_W - 8, MENU_ROW - 1, 0x46B8F0, 0);
-        gfx_icon(x + 8, row + 3, launchers[i].icon, 1);
-        gfx_text_bold(x + 30, row + 3, launchers[i].label, hot ? INK : 0xFFFFFF);
-        gfx_text(x + 30, row + 12, launchers[i].blurb, hot ? DARKER(0x46B8F0, 150) : LIGHTER(theme->glass_top, 150));
+            gfx_gel(x + 4, row + 1, MENU_W - 8, MENU_ROW - 2, theme->select, 0);
+        gfx_icon(x + 8, row + 4, launchers[i].icon, 1);
+        gfx_text_bold(x + 32, row + 4, launchers[i].label, theme->chrome_text);
+        gfx_text(x + 32, row + 13, launchers[i].blurb, theme->idle);
     }
 
     y = top + MENU_HEAD + 4 + LAUNCHER_COUNT * MENU_ROW;
-    gfx_text_bold(x + 8, y + 6, "run", 0xFFFFFF);
-    gfx_inset(x + 36, y + 2, MENU_W - 46, RUN_H - 6, 0xF4F8FA);
-    gfx_text_n(x + 40, y + 6, run_command, (MENU_W - 54) / CHAR_W, INK);
+    gfx_text_bold(x + 8, y + 7, "run", theme->chrome_text);
+    gfx_inset(x + 38, y + 3, MENU_W - 48, RUN_H - 6, theme->field);
+    gfx_text_n(x + 42, y + 7, run_command, (MENU_W - 56) / CHAR_W, theme->text);
     if (wm_frame() / 25 % 2 == 0)
-        gfx_fill(x + 40 + run_length * CHAR_W, y + 5, 1, 10, INK);
+        gfx_fill(x + 42 + run_length * CHAR_W, y + 6, 1, 10, theme->text);
 
-    y += RUN_H + 2;
-    for (int i = 0; i < POWER_COUNT; i++)
-        gfx_slab(x + power_button_x(i), y, button_w, POWER_H - 2, power_buttons[i].color,
-                 gfx_inside(mouse_x, mouse_y, x + power_button_x(i), y, button_w, POWER_H - 2) &&
-                     (last_buttons & BS_MOUSE_LEFT));
-    for (int i = 0; i < POWER_COUNT; i++)
-        gfx_text(x + power_button_x(i) + (button_w - (int)strlen(power_buttons[i].label) * CHAR_W) / 2, y + 7,
-                 power_buttons[i].label, INK);
+    y = power_y();
+    for (int i = 0; i < POWER_COUNT; i++) {
+        int bx = power_button_x(i), pressed = gfx_inside(mouse_x, mouse_y, bx, y, power_button_width(), POWER_H - 4) &&
+                                              (last_buttons & BS_MOUSE_LEFT);
+
+        gfx_slab(bx, y, power_button_width(), POWER_H - 4, power_buttons[i].color, pressed);
+        gfx_text(bx + (power_button_width() - (int)strlen(power_buttons[i].label) * CHAR_W) / 2, y + 6,
+                 power_buttons[i].label, 0xFFFFFF);
+    }
+    gfx_frame(x, top, MENU_W, menu_height());
 }
 
 static int menu_press(int x, int y)
 {
-    int top = menu_top(), button_w = (MENU_W - 12 - 3 * 4) / POWER_COUNT;
-    int row_top = top + MENU_HEAD + 2, power_y = top + MENU_HEAD + 4 + LAUNCHER_COUNT * MENU_ROW + RUN_H + 2;
+    int top = menu_top(), row_top = top + MENU_HEAD + 2;
 
-    if (!gfx_inside(x, y, 2, top, MENU_W, menu_height()))
+    if (!gfx_inside(x, y, 4, top, MENU_W, menu_height()))
         return 0;
     if (y >= row_top && y < row_top + LAUNCHER_COUNT * MENU_ROW) {
         launch((y - row_top) / MENU_ROW);
         return 1;
     }
     for (int i = 0; i < POWER_COUNT; i++)
-        if (gfx_inside(x, y, 2 + power_button_x(i), power_y, button_w, POWER_H - 2))
+        if (gfx_inside(x, y, power_button_x(i), power_y(), power_button_width(), POWER_H - 4))
             leave(power_buttons[i].action);
     return 1;
 }
 
-/* ---- Desktop icons -------------------------------------------------------------- */
+/* ---- Desktop icons: tiles in columns, filled top to bottom ----------------------- */
+
+static int icons_per_column(void)
+{
+    int rows = (work_bottom() - 8) / ICON_PITCH_Y;
+
+    return rows > 0 ? rows : 1;
+}
+
+static int icon_x(int i) { return 6 + i / icons_per_column() * ICON_PITCH_X; }
+static int icon_y(int i) { return 7 + i % icons_per_column() * ICON_PITCH_Y; }
 
 static int icon_at(int x, int y)
 {
     for (int i = 0; i < LAUNCHER_COUNT; i++)
-        if (gfx_inside(x, y, 8, 8 + i * ICON_SLOT, 64, ICON_SLOT - 4))
+        if (gfx_inside(x, y, icon_x(i), icon_y(i), TILE + 8, ICON_PITCH_Y - 4))
             return i;
     return -1;
 }
@@ -569,15 +592,58 @@ static void draw_icons(void)
 {
     gfx_unclip();
     for (int i = 0; i < LAUNCHER_COUNT; i++) {
-        int top = 8 + i * ICON_SLOT, label_w = (int)strlen(launchers[i].label) * CHAR_W;
+        int x = icon_x(i), y = icon_y(i), label_w = (int)strlen(launchers[i].label) * CHAR_W;
 
-        if (i == icon_selected) {
-            gfx_darken(10, top, 60, ICON_SLOT - 6, 70);
-            gfx_outline(10, top, 60, ICON_SLOT - 6, 0xFFFFFF);
+        gfx_chrome(x, y, TILE, TILE, theme->tile, 0);
+        if (i == icon_selected)
+            gfx_frame(x - 2, y - 2, TILE + 4, TILE + 4);
+        gfx_icon(x + (TILE - 32) / 2, y + (TILE - 32) / 2, launchers[i].icon, 2);
+        gfx_text(x + (TILE - label_w) / 2 + 1, y + TILE + 5, launchers[i].label, INK);
+        gfx_text(x + (TILE - label_w) / 2, y + TILE + 4, launchers[i].label, 0xFFFFFF);
+    }
+}
+
+/* ---- The taskbar: B, then a [name | ^ | X] per window, the tray on the right ---- */
+
+static int task_name_width(void)
+{
+    int room = SCREEN_W - TRAY_W - 14 - (4 + B_SIZE + 8);
+    int each = window_count ? room / window_count - 6 - 2 * TASK_BUTTON : TASK_NAME_MAX;
+
+    return each < TASK_NAME_MAX ? each : TASK_NAME_MAX;
+}
+
+static int task_x(int i)
+{
+    return 4 + B_SIZE + 8 + i * (task_name_width() + 2 * TASK_BUTTON + 6);
+}
+
+static void press_taskbar(int x)
+{
+    if (x < 4 + B_SIZE + 4) {
+        menu_open = !menu_open;
+        menu_selected = 0;
+        return;
+    }
+    for (int i = 0; i < window_count; i++) {
+        int left = task_x(i), name_w = task_name_width();
+
+        if (x >= left && x < left + name_w) {
+            if (focused() == &windows[i])
+                windows[i].minimized = 1; /* the active window's button hides it */
+            else
+                raise_window(i);
+            return;
         }
-        gfx_icon(24, top + 3, launchers[i].icon, 2);
-        gfx_text(40 - label_w / 2 + 1, top + 38, launchers[i].label, INK);
-        gfx_text(40 - label_w / 2, top + 37, launchers[i].label, 0xFFFFFF);
+        if (x >= left + name_w && x < left + name_w + TASK_BUTTON) {
+            raise_window(i);
+            toggle_maximize(&windows[window_count - 1]);
+            return;
+        }
+        if (x >= left + name_w + TASK_BUTTON && x < left + name_w + 2 * TASK_BUTTON) {
+            request_close(i);
+            return;
+        }
     }
 }
 
@@ -592,37 +658,6 @@ static int window_at(int x, int y)
             return i;
     }
     return -1;
-}
-
-/* Task buttons share the room between the launch button and the tray. */
-static int task_width(void)
-{
-    int room = SCREEN_W - TRAY_W - 12 - (LAUNCH_W + 8), each = window_count ? room / window_count - 4 : TASK_W;
-
-    return each < TASK_W ? each : TASK_W;
-}
-
-static int task_x(int i)
-{
-    return LAUNCH_W + 8 + i * (task_width() + 4);
-}
-
-static void press_taskbar(int x)
-{
-    if (x < LAUNCH_W + 4) {
-        menu_open = !menu_open;
-        menu_selected = 0;
-        return;
-    }
-    for (int i = 0; i < window_count; i++) {
-        if (x >= task_x(i) && x < task_x(i) + task_width()) {
-            if (focused() == &windows[i])
-                windows[i].minimized = 1; /* the active window's button hides it */
-            else
-                raise_window(i);
-            return;
-        }
-    }
 }
 
 static void press(int x, int y)
@@ -663,12 +698,12 @@ static void press(int x, int y)
     {
         struct window *w = &windows[window_count - 1];
 
-        if (gfx_inside(x, y, w->x, title_top(w), w->w, TITLE_H)) {
-            if (gfx_inside(x, y, button_x(w, 0), title_top(w) + 2, BUTTON, BUTTON)) {
+        if (gfx_inside(x, y, title_left(w), title_top(w), title_width(w), TITLE_H)) {
+            if (gfx_inside(x, y, button_x(w, 0), title_top(w), TITLE_BUTTON, TITLE_H)) {
                 w->minimized = 1;
-            } else if (gfx_inside(x, y, button_x(w, 1), title_top(w) + 2, BUTTON, BUTTON)) {
+            } else if (gfx_inside(x, y, button_x(w, 1), title_top(w), TITLE_BUTTON, TITLE_H)) {
                 toggle_maximize(w);
-            } else if (gfx_inside(x, y, button_x(w, 2), title_top(w) + 2, BUTTON, BUTTON)) {
+            } else if (gfx_inside(x, y, button_x(w, 2), title_top(w), TITLE_BUTTON, TITLE_H)) {
                 request_close(window_count - 1);
             } else if (double_click) {
                 toggle_maximize(w);
@@ -677,7 +712,7 @@ static void press(int x, int y)
                 drag_dx = x - w->x;
                 drag_dy = y - w->y;
             }
-        } else if (gfx_inside(x, y, w->x + w->w - GRIP, w->y + w->h - GRIP, GRIP + 2, GRIP + 2)) {
+        } else if (gfx_inside(x, y, w->x + w->w - GRIP, w->y + w->h - GRIP, GRIP + FRAME, GRIP + FRAME)) {
             drag = DRAG_RESIZE;
             drag_dx = w->x + w->w - x;
             drag_dy = w->y + w->h - y;
@@ -809,66 +844,104 @@ int wm_tick(void)
 
 /* ---- Drawing -------------------------------------------------------------------- */
 
+/* The title bar glyphs: line-drawn V, ^ and X, centred in a segment. */
+static void title_glyph(int x, int y, int which, unsigned int color)
+{
+    int cx = x + TITLE_BUTTON / 2, cy = y + TITLE_H / 2;
+
+    if (which == 0) {
+        gfx_line(cx - 6, cy - 4, cx - 1, cy + 4, 2, color);
+        gfx_line(cx, cy + 4, cx + 5, cy - 4, 2, color);
+    } else if (which == 1) {
+        gfx_line(cx - 6, cy + 4, cx - 1, cy - 4, 2, color);
+        gfx_line(cx, cy - 4, cx + 5, cy + 4, 2, color);
+    } else {
+        gfx_line(cx - 5, cy - 5, cx + 4, cy + 4, 2, color);
+        gfx_line(cx + 4, cy - 5, cx - 5, cy + 4, 2, color);
+    }
+}
+
 static void draw_window(const struct window *w, int is_focused)
 {
-    unsigned int title = is_focused ? w->app->accent : theme->idle;
-    int top = title_top(w);
-    static const char *const glyphs[3] = {"_", "+", "x"};
+    int top = title_top(w), left = title_left(w), width = title_width(w);
+    unsigned int text = is_focused ? theme->chrome_text : theme->idle;
 
     gfx_unclip();
     gfx_shadow(outer_left(w), outer_top(w), outer_width(w), outer_height(w));
-    gfx_frame(outer_left(w), outer_top(w), outer_width(w), outer_height(w));
-    gfx_gel(w->x, top, w->w, TITLE_H, title, 0);
-    gfx_icon(w->x + 3, top + 1, w->app->icon, 1);
-    gfx_text_raised(w->x + 24, top + 6, w->app->name, is_focused ? 0xFFFFFF : 0xE0E8EE);
+    gfx_fill(outer_left(w), outer_top(w), outer_width(w), outer_height(w), theme->chrome);
+    gfx_chrome(left, top, width, TITLE_H, is_focused ? LIGHTER(theme->chrome, 18) : theme->chrome, 0);
+    gfx_text_scaled(left + 6, top + 5, w->app->name, 2, text);
     for (int i = 0; i < 3; i++) {
         int bx = button_x(w, i);
 
-        gfx_slab(bx, top + 2, BUTTON, BUTTON, i == 2 ? 0xE2412F : 0xDCE6EC, 0);
-        gfx_text(bx + 4, top + 5, glyphs[i], i == 2 ? 0xFFFFFF : INK);
+        gfx_fill(bx, top, 2, TITLE_H, theme->line); /* the segment's left edge */
+        title_glyph(bx + 1, top, i, i == 2 && is_focused ? theme->accent : text);
     }
-    gfx_fill(w->x, w->y - SEP, w->w, SEP, INK);
+    gfx_fill(outer_left(w), w->y - SEP, outer_width(w), SEP, theme->line);
+    gfx_frame(outer_left(w), outer_top(w), outer_width(w), outer_height(w));
 
     gfx_clip(w->x, w->y, w->w, w->h);
     gfx_fill(0, 0, w->w, w->h, theme->window);
     w->app->draw(w->w, w->h, is_focused);
-    gfx_bevel(0, 0, w->w, w->h, 1);
 
-    /* The grip: three ridges, each a light and a dark line. */
+    /* The grip: three ridges in the corner. */
     for (int ridge = 0; ridge < 3; ridge++) {
         int reach = 3 + ridge * 3;
 
-        for (int i = 0; i < reach; i++) {
-            gfx_fill(w->w - 2 - reach + i, w->h - 2 - i, 1, 1, 0xFFFFFF);
-            gfx_fill(w->w - 1 - reach + i, w->h - 2 - i, 1, 1, 0x6C7C86);
-        }
+        for (int i = 0; i < reach; i++)
+            gfx_fill(w->w - 2 - reach + i, w->h - 2 - i, 1, 1, theme->dim);
     }
     gfx_unclip();
 }
 
 static void draw_taskbar(void)
 {
-    int top = work_bottom();
+    int top = work_bottom(), name_w = task_name_width();
 
     gfx_unclip();
-    gfx_glass(0, top, SCREEN_W, TASKBAR_H, theme->glass_top, theme->glass_bottom);
-    gfx_fill(0, top, SCREEN_W, 2, INK);
+    gfx_chrome(0, top, SCREEN_W, TASKBAR_H, theme->chrome, 0);
+    gfx_fill(0, top, SCREEN_W, 2, theme->line);
 
-    gfx_slab(3, top + 4, LAUNCH_W, TASKBAR_H - 7, theme->accent, menu_open);
-    gfx_text_raised(3 + (LAUNCH_W - 2 * (CHAR_W + 1)) / 2, top + 10, "BS", 0xFFFFFF);
+    /* The B: a framed slab with the letter big and bright. */
+    gfx_chrome(4, top + 4, B_SIZE, B_SIZE, theme->chrome, menu_open);
+    gfx_frame(4, top + 4, B_SIZE, B_SIZE);
+    gfx_text_scaled(4 + (B_SIZE - 15) / 2 + 1, top + 4 + (B_SIZE - 21) / 2 + 1, "B", 3, INK);
+    gfx_text_scaled(4 + (B_SIZE - 15) / 2, top + 4 + (B_SIZE - 21) / 2, "B", 3, theme->accent);
 
     for (int i = 0; i < window_count; i++) {
-        int left = task_x(i), width = task_width(), active = focused() == &windows[i];
+        int left = task_x(i), active = focused() == &windows[i];
+        int total = name_w + 2 * TASK_BUTTON, y = top + 7, h = TASKBAR_H - 12;
+        unsigned int text = windows[i].minimized ? theme->idle : theme->chrome_text;
+        int chars = (name_w - 8) / (2 * CHAR_W);
 
-        gfx_slab(left, top + 4, width, TASKBAR_H - 7, active ? TASK_ACTIVE : TASK_BASE, active);
-        gfx_icon(left + 4, top + 6, windows[i].app->icon, 1);
-        gfx_text_n(left + 24, top + 10, windows[i].app->name, (width - 28) / CHAR_W,
-                   windows[i].minimized ? 0x30404A : INK);
+        gfx_chrome(left, y, total, h, active ? LIGHTER(theme->chrome, 30) : theme->chrome, active);
+        if (chars >= 4) { /* the name big when it fits, small when it does not */
+            char name[16];
+
+            copy_string(name, sizeof(name), windows[i].app->name);
+            if ((int)strlen(name) > chars)
+                name[chars] = 0;
+            gfx_text_scaled(left + 5, y + (h - 14) / 2, name, 2, text);
+        } else {
+            gfx_text_n(left + 4, y + (h - 7) / 2, windows[i].app->name, (name_w - 6) / CHAR_W, text);
+        }
+        for (int b = 0; b < 2; b++) {
+            int bx = left + name_w + b * TASK_BUTTON, cx = bx + TASK_BUTTON / 2, cy = y + h / 2;
+
+            gfx_fill(bx, y, 2, h, theme->line);
+            if (b == 0) {
+                gfx_line(cx - 5, cy + 3, cx - 1, cy - 4, 2, text);
+                gfx_line(cx, cy - 4, cx + 4, cy + 3, 2, text);
+            } else {
+                gfx_line(cx - 4, cy - 4, cx + 3, cy + 3, 2, text);
+                gfx_line(cx + 3, cy - 4, cx - 4, cy + 3, 2, text);
+            }
+        }
+        gfx_frame(left, y, total, h);
     }
 
-    gfx_inset(SCREEN_W - TRAY_W - 5, top + 6, TRAY_W, TASKBAR_H - 11, DARKER(theme->glass_bottom, 90));
-    gfx_text(SCREEN_W - TRAY_W, top + 10, address_text, LIGHTER(theme->glass_top, 120));
-    gfx_text_bold(SCREEN_W - 6 * 7 - 8, top + 10, clock_text, 0xFFFFFF);
+    gfx_text_scaled(SCREEN_W - 5 * 2 * CHAR_W - 8, top + 13, clock_text, 2, theme->chrome_text);
+    gfx_text(SCREEN_W - 5 * 2 * CHAR_W - 18 - (int)strlen(address_text) * CHAR_W, top + 18, address_text, theme->idle);
 }
 
 void wm_render(int mouse_x, int mouse_y)
@@ -890,7 +963,7 @@ void wm_render(int mouse_x, int mouse_y)
     if (drag == DRAG_MOVE)
         pointer = POINTER_MOVE;
     else if (drag == DRAG_RESIZE ||
-             (w && !dialog.open && gfx_inside(mouse_x, mouse_y, w->x + w->w - GRIP, w->y + w->h - GRIP, GRIP + 2, GRIP + 2)))
+             (w && !dialog.open && gfx_inside(mouse_x, mouse_y, w->x + w->w - GRIP, w->y + w->h - GRIP, GRIP + FRAME, GRIP + FRAME)))
         pointer = POINTER_RESIZE;
     gfx_pointer(mouse_x, mouse_y, pointer);
     gfx_present();

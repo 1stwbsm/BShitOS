@@ -27,10 +27,13 @@ A 32-bit hobby operating system written in C, from the bootloader up.
   partitions the disk (GPT, ESP, BSFS filling the rest), copies the system and
   creates your account and a root password.
 - **BDeskUI**: the operating environment on top of the TTY, started at login by
-  `/conf/autoexec.bsh` wherever there's a graphics mode. It has windows, a taskbar,
-  desktop icons and a launch menu, drawn in gel and glass inside heavy black frames
-  with hard shadows. It comes with four skins. "to TTY" in its menu drops you to the
-  shell, and Settings can turn the autostart off.
+  `/conf/autoexec.bsh` wherever there's a graphics mode. It has icon tiles, windows
+  with V/^/X title buttons, and a taskbar with the B launcher, where every window gets
+  [name | ^ | X]. Windows are glossy chrome held in heavy outlines with hard shadows.
+  The "night" skin is the default; aqua, meadow, dusk and concrete are the others.
+  BDeskUI fills any screen at a whole-number scale (1920x1080 is 640x360 at 3x,
+  1280x800 is 640x400 at 2x). "to TTY" in the B menu drops you to the shell, and
+  BSconf can turn the autostart off.
 - **Graceful shutdown**: `poweroff`, `reboot` and the power button ask every program
   to exit first (BDeskUI offers to save unsaved work), then the disks are flushed.
 - **web**: a text web browser with HTTPS

@@ -101,7 +101,7 @@ static void files_draw(int w, int h, int focused)
     gfx_button(38, 3, 40, 14, "Open", 0);
     gfx_inset(85, 4, w - 92, 12, theme->field);
     gfx_text_n(88, 7, path, (w - 98) / CHAR_W, theme->text);
-    gfx_fill(0, BAR_H, w, 2, INK);
+    gfx_fill(0, BAR_H, w, 2, theme->line);
 
     for (int i = 0; i < rows && scroll + i < entry_count; i++) {
         const struct bs_dirent *e = &entries[scroll + i];
@@ -111,7 +111,7 @@ static void files_draw(int w, int h, int focused)
                                                                              : ICON_FILE;
 
         if (scroll + i == selected)
-            gfx_gel(2, y - 1, w - 4, ROW_H, 0x46B8F0, 0);
+            gfx_gel(2, y - 1, w - 4, ROW_H, theme->select, 0);
         gfx_icon(6, y, icon, 1);
         gfx_text_n(26, y + 5, e->name, (w - 108) / CHAR_W, theme->text);
         y += 5;
@@ -185,7 +185,7 @@ static void files_key(int key)
 }
 
 const struct app app_files = {
-    .name = "Files", .blurb = "browse files", .accent = 0xE08A1E, .icon = ICON_FILES,
+    .name = "BSfile", .blurb = "browse files", .accent = 0xE08A1E, .icon = ICON_FILES,
     .default_w = 330, .default_h = 260, .min_w = 200, .min_h = 100,
     .open = files_open, .draw = files_draw, .key = files_key, .press = files_press,
 };

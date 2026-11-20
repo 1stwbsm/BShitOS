@@ -131,11 +131,11 @@ static void notes_draw(int w, int h, int focused)
     gfx_text_n(86, 7, path, (w - 92) / CHAR_W - 2, theme->text);
     if (modified)
         gfx_text(w - 10, 7, "*", app_notes.accent);
-    gfx_fill(0, BAR_H, w, 2, INK);
-    gfx_fill(0, BAR_H + 2, w, h - BAR_H - 2, 0xFFFEF6);
+    gfx_fill(0, BAR_H, w, 2, theme->line);
+    gfx_fill(0, BAR_H + 2, w, h - BAR_H - 2, theme->field);
     for (int rule = BAR_H + PAD + LINE_H - 1; rule < h; rule += LINE_H) /* the rules sit under each line */
-        gfx_fill(0, rule, w, 1, 0xCFE0EE);
-    gfx_fill(PAD - 3, BAR_H + 2, 1, h - BAR_H - 2, 0xF0A8A0); /* the margin */
+        gfx_fill(0, rule, w, 1, theme->rule);
+    gfx_fill(PAD - 3, BAR_H + 2, 1, h - BAR_H - 2, mix(theme->field, 0xE05050, 110)); /* the margin */
 
     for (int i = 0; i <= length; i++) {
         int on_screen = line >= top_line && line < top_line + visible_lines;
@@ -251,7 +251,7 @@ static void notes_press(int x, int y, int w, int h)
 }
 
 const struct app app_notes = {
-    .name = "Notes", .blurb = "edit text", .accent = 0x3F78D8, .icon = ICON_NOTES,
+    .name = "BSnote", .blurb = "edit text", .accent = 0x3F78D8, .icon = ICON_NOTES,
     .unsaved = notes_unsaved, .save = save,
     .default_w = 380, .default_h = 260, .min_w = 180, .min_h = 90,
     .open = notes_open_request, .draw = notes_draw, .key = notes_key, .press = notes_press,

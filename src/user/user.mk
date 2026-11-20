@@ -11,7 +11,7 @@ USER_CFLAGS := $(COMMON_CFLAGS) -m32 -march=i386 -mtune=generic -I$(USER_DIR)/in
 USER_LDFLAGS := -m elf_i386 -nostdlib -z noexecstack --no-warn-rwx-segments --build-id=none -T $(USER_LDSCRIPT)
 
 PROGRAM_BASE := 0x40000000
-LIBBS_BASE   := 0x40400000
+LIBBS_BASE   := 0x41000000
 
 LIBBS_SRCS := $(wildcard $(USER_DIR)/lib/*.c)
 LIBBS_OBJS := $(patsubst $(USER_DIR)/%.c,$(USER_OBJ_DIR)/%.o,$(LIBBS_SRCS))

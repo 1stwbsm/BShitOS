@@ -412,7 +412,9 @@ static uint32_t find_rsdp(void)
 
 static int pick_vbe_mode(struct bootinfo_framebuffer *fb)
 {
-    static const uint16_t wanted[][2] = {{1280, 800}, {1280, 1024}, {1280, 960}, {1024, 768}, {800, 600}, {640, 480}};
+    /* Best first. BDeskUI fills any of them at a whole-number scale. */
+    static const uint16_t wanted[][2] = {{1920, 1080}, {1680, 1050}, {1600, 900}, {1440, 900}, {1280, 1024},
+                                         {1280, 800}, {1280, 960}, {1024, 768}, {800, 600}, {640, 480}};
     uint8_t *info = (uint8_t *)VBE_INFO, *mode = (uint8_t *)VBE_MODE_INFO;
     struct bios_regs r;
     uint32_t list;

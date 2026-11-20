@@ -138,8 +138,11 @@ struct bs_time {
 };
 
 /* Process memory layout */
+/* A program gets 16 MiB (code, data, then its stack under BS_LIB_BASE) and its
+ * libraries 8 MiB. Only pages actually touched take memory. */
 #define BS_USER_BASE 0x40000000u
-#define BS_LIB_BASE  0x40400000u
-#define BS_USER_TOP  0x40800000u
+#define BS_LIB_BASE  0x41000000u
+#define BS_USER_TOP  0x41800000u
+#define BS_USER_SLOTS ((BS_USER_TOP - BS_USER_BASE) >> 22) /* 4 MiB page tables */
 
 #endif

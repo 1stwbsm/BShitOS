@@ -1,19 +1,29 @@
 /*
  * BDeskUI: the operating environment that runs on top of BShitOS. Windows, a
- * taskbar and desktop icons, drawn as glossy gel and glass held in heavy black
- * frames with hard shadows. Shared definitions.
+ * taskbar and desktop icons: gloss and glass for depth, held in heavy outlines
+ * with hard shadows. Shared definitions.
+ *
+ * Everything is laid out in units of one "layout pixel"; the screen shows each
+ * as scale x scale real pixels, scale picked so the layout fills the screen
+ * (1280x800 -> 640x400 at 2x, 1920x1080 -> 640x360 at 3x, 1024x768 -> 1:1).
+ * The design (the BDeskUI mockup) is drawn for 640x360 at 3x.
  */
 #ifndef BDESKUI_H
 #define BDESKUI_H
 
 #include "bs.h"
 
-#define SCREEN_W 640
-#define SCREEN_H 400
+extern int screen_w, screen_h; /* the layout, set once at start */
+#define SCREEN_W screen_w
+#define SCREEN_H screen_h
+#define MIN_W 640
+#define MIN_H 360
+#define MAX_W 1400 /* the biggest layout drawn 1:1; larger screens scale up */
+#define MAX_H 900
 #define CHAR_W 6
 #define CHAR_H 8
 #define LINE_H 10
-#define TASKBAR_H 26
+#define TASKBAR_H 40
 #define KEY_ESCAPE 0x1B
 #define CTRL(c) ((c) & 0x1F)
 
@@ -25,11 +35,15 @@
 struct theme {
     const char *name;
     unsigned int sky_top, sky_bottom; /* the wallpaper gradient */
-    unsigned int glass_top, glass_bottom; /* taskbar and menu glass */
-    unsigned int accent; /* the launch button's gel */
-    unsigned int idle; /* title bars of windows without the focus */
+    int bubbles; /* how much the wallpaper's glass bubbles show, 0..256 */
+    int gloss; /* how glassy chrome surfaces look, 0..256 */
+    unsigned int line; /* the heavy outlines: frames, separators, button edges */
+    unsigned int chrome, chrome_text; /* window frames, title bars, the taskbar */
+    unsigned int accent; /* the B, and other things that should stand out */
+    unsigned int idle; /* titles of windows without the focus */
+    unsigned int tile; /* desktop icon tiles */
     /* inside windows */
-    unsigned int window, text, dim, line, select, field;
+    unsigned int window, text, dim, rule, select, field, button;
 };
 
 extern const struct theme *theme;
@@ -38,7 +52,7 @@ extern const struct theme *theme;
 unsigned int mix(unsigned int a, unsigned int b, int amount); /* amount 0..256 toward b */
 #define LIGHTER(c, n) mix((c), 0xFFFFFF, (n))
 #define DARKER(c, n) mix((c), 0x000000, (n))
-#define INK 0x0B1014u /* the black of frames and outlines */
+#define INK 0x0B1014u /* black, for drop shadows under text */
 
 /* ---- Drawing (gfx.c). Coordinates are relative to the current clip. ------- */
 void gfx_clip(int x, int y, int w, int h);
@@ -47,12 +61,15 @@ void gfx_fill(int x, int y, int w, int h, unsigned int color);
 void gfx_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bottom);
 /* Glossy gel: a lit upper half with a highlight band over a deeper lower half. */
 void gfx_gel(int x, int y, int w, int h, unsigned int base, int pressed);
+/* Chrome surfaces (title bars, the taskbar, tiles): a sheen as strong as the skin's gloss. */
+void gfx_chrome(int x, int y, int w, int h, unsigned int base, int pressed);
 /* Smoked glass: a gradient with a bright top edge. */
 void gfx_glass(int x, int y, int w, int h, unsigned int top, unsigned int bottom);
 void gfx_bevel(int x, int y, int w, int h, int raised);
 void gfx_inset(int x, int y, int w, int h, unsigned int fill); /* a recessed well */
 void gfx_outline(int x, int y, int w, int h, unsigned int color);
-void gfx_frame(int x, int y, int w, int h); /* a 2 px black frame */
+void gfx_frame(int x, int y, int w, int h); /* a 2 px frame in the theme's line colour */
+void gfx_line(int x0, int y0, int x1, int y1, int thickness, unsigned int color);
 void gfx_shadow(int x, int y, int w, int h); /* hard shadow, offset down-right */
 void gfx_darken(int x, int y, int w, int h, int amount);
 /* A framed gel slab with cut corners: buttons, tabs, the launch button. */
@@ -72,6 +89,7 @@ enum icon {
 };
 void gfx_icon(int x, int y, enum icon which, int scale); /* 16x16 times scale */
 
+void gfx_init(int width, int height); /* the layout size, at start */
 void gfx_wallpaper(void); /* redraws the cached wallpaper for the current theme */
 void gfx_draw_wallpaper(int top, int height);
 enum pointer_kind { POINTER_ARROW, POINTER_RESIZE, POINTER_MOVE };

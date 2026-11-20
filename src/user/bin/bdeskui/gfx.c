@@ -1,15 +1,25 @@
 /*
- * Drawing. Everything lands in a 640x400 frame that the kernel scales onto the
- * screen. The look: gel and glass shading for depth, held in by 2 px black
- * frames and hard, unblurred shadows.
+ * Drawing. Everything lands in a frame of screen_w x screen_h layout pixels
+ * that the kernel scales onto the screen. The look: gel and glass shading for
+ * depth, held in by 2 px outlines and hard, unblurred shadows.
  */
 #include <bshit/font5x7.h>
 
 #include "bdeskui.h"
 
-static unsigned int frame[SCREEN_W * SCREEN_H];
-static unsigned int wallpaper[SCREEN_W * SCREEN_H];
-static int origin_x, origin_y, clip_left, clip_top, clip_right = SCREEN_W, clip_bottom = SCREEN_H;
+/* Sized for the biggest layout; pages beyond the one in use are never touched,
+ * so they take no memory. */
+static unsigned int frame[MAX_W * MAX_H];
+static unsigned int wallpaper[MAX_W * MAX_H];
+int screen_w = MIN_W, screen_h = MIN_H;
+static int origin_x, origin_y, clip_left, clip_top, clip_right = MIN_W, clip_bottom = MIN_H;
+
+void gfx_init(int width, int height)
+{
+    screen_w = width;
+    screen_h = height;
+    gfx_unclip();
+}
 
 unsigned int mix(unsigned int a, unsigned int b, int amount)
 {
@@ -91,6 +101,19 @@ void gfx_gel(int x, int y, int w, int h, unsigned int base, int pressed)
     gfx_fill(x, y + h - 1, w, 1, LIGHTER(base, 90)); /* light coming back up through the gel */
 }
 
+void gfx_chrome(int x, int y, int w, int h, unsigned int base, int pressed)
+{
+    int upper = h * 9 / 20, g = theme->gloss;
+
+    if (pressed) {
+        gfx_gradient(x, y, w, h, DARKER(base, 60), LIGHTER(base, g / 3));
+        return;
+    }
+    gfx_gradient(x, y, w, upper, LIGHTER(base, g), LIGHTER(base, g / 3));
+    gfx_gradient(x, y + upper, w, h - upper, DARKER(base, 12), LIGHTER(base, g / 5));
+    gfx_fill(x + 1, y + 1, w - 2, 1, LIGHTER(base, g + 40 > 256 ? 256 : g + 40)); /* the specular line */
+}
+
 void gfx_glass(int x, int y, int w, int h, unsigned int top, unsigned int bottom)
 {
     gfx_gradient(x, y, w, h, top, bottom);
@@ -114,7 +137,7 @@ void gfx_inset(int x, int y, int w, int h, unsigned int fill)
     gfx_fill(x, y, w, 2, DARKER(fill, 90));
     gfx_fill(x, y, 2, h, DARKER(fill, 60));
     gfx_fill(x, y + h - 1, w, 1, LIGHTER(fill, 120));
-    gfx_outline(x - 1, y - 1, w + 2, h + 2, INK);
+    gfx_outline(x - 1, y - 1, w + 2, h + 2, theme->line);
 }
 
 void gfx_outline(int x, int y, int w, int h, unsigned int color)
@@ -127,8 +150,29 @@ void gfx_outline(int x, int y, int w, int h, unsigned int color)
 
 void gfx_frame(int x, int y, int w, int h)
 {
-    gfx_outline(x, y, w, h, INK);
-    gfx_outline(x + 1, y + 1, w - 2, h - 2, INK);
+    gfx_outline(x, y, w, h, theme->line);
+    gfx_outline(x + 1, y + 1, w - 2, h - 2, theme->line);
+}
+
+/* Bresenham, stamped thickness x thickness: the V, ^ and X of the title bars. */
+void gfx_line(int x0, int y0, int x1, int y1, int thickness, unsigned int color)
+{
+    int dx = x1 > x0 ? x1 - x0 : x0 - x1, dy = y1 > y0 ? y0 - y1 : y1 - y0;
+    int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, error = dx + dy;
+
+    for (;;) {
+        gfx_fill(x0, y0, thickness, thickness, color);
+        if (x0 == x1 && y0 == y1)
+            return;
+        if (2 * error >= dy) {
+            error += dy;
+            x0 += sx;
+        }
+        if (2 * error <= dx) {
+            error += dx;
+            y0 += sy;
+        }
+    }
 }
 
 void gfx_darken(int x, int y, int w, int h, int amount)
@@ -150,16 +194,18 @@ void gfx_shadow(int x, int y, int w, int h)
 
 void gfx_slab(int x, int y, int w, int h, unsigned int base, int pressed)
 {
+    unsigned int line = theme->line;
+
     gfx_gel(x + 1, y + 1, w - 2, h - 2, base, pressed);
     /* The frame skips the corner pixels, and the cut closes diagonally inside. */
-    gfx_fill(x + 1, y, w - 2, 1, INK);
-    gfx_fill(x + 1, y + h - 1, w - 2, 1, INK);
-    gfx_fill(x, y + 1, 1, h - 2, INK);
-    gfx_fill(x + w - 1, y + 1, 1, h - 2, INK);
-    plot(origin_x + x + 1, origin_y + y + 1, INK);
-    plot(origin_x + x + w - 2, origin_y + y + 1, INK);
-    plot(origin_x + x + 1, origin_y + y + h - 2, INK);
-    plot(origin_x + x + w - 2, origin_y + y + h - 2, INK);
+    gfx_fill(x + 1, y, w - 2, 1, line);
+    gfx_fill(x + 1, y + h - 1, w - 2, 1, line);
+    gfx_fill(x, y + 1, 1, h - 2, line);
+    gfx_fill(x + w - 1, y + 1, 1, h - 2, line);
+    plot(origin_x + x + 1, origin_y + y + 1, line);
+    plot(origin_x + x + w - 2, origin_y + y + 1, line);
+    plot(origin_x + x + 1, origin_y + y + h - 2, line);
+    plot(origin_x + x + w - 2, origin_y + y + h - 2, line);
 }
 
 /* ---- Text ------------------------------------------------------------------- */
@@ -214,10 +260,10 @@ void gfx_text_scaled(int x, int y, const char *s, int scale, unsigned int color)
 
 void gfx_button(int x, int y, int w, int h, const char *label, int highlighted)
 {
-    unsigned int base = highlighted ? 0x46B8F0 : 0xC9D6DE;
+    unsigned int base = highlighted ? theme->select : theme->button;
 
     gfx_slab(x, y, w, h, base, 0);
-    gfx_text(x + (w - (int)strlen(label) * CHAR_W) / 2, y + (h - 7) / 2, label, highlighted ? INK : 0x18242C);
+    gfx_text(x + (w - (int)strlen(label) * CHAR_W) / 2, y + (h - 7) / 2, label, theme->text);
 }
 
 /* A liquid tube: a recessed well with gel filling it up. */
@@ -230,7 +276,7 @@ void gfx_bar(int x, int y, int w, int h, unsigned int used, unsigned int total, 
         used >>= 1;
     }
     filled = total ? (int)(used * (unsigned int)(w - 2) / total) : 0;
-    gfx_inset(x, y, w, h, 0xDDE6EB);
+    gfx_inset(x, y, w, h, theme->field);
     if (filled > 0)
         gfx_gel(x + 1, y + 1, filled, h - 2, color, 0);
 }
@@ -374,29 +420,31 @@ static void bubble(int cx, int cy, int r)
                 amount = 22 + 40 * d / (r * r); /* clearer in the middle */
             if ((x - hx) * (x - hx) + (y - hy) * (y - hy) <= hr * hr)
                 amount = 190; /* the highlight */
-            wallpaper[y * SCREEN_W + x] = mix(wallpaper[y * SCREEN_W + x], 0xFFFFFF, amount);
+            wallpaper[y * SCREEN_W + x] = mix(wallpaper[y * SCREEN_W + x], 0xFFFFFF, amount * theme->bubbles / 256);
         }
     }
 }
 
 void gfx_wallpaper(void)
 {
+    /* Positions in 1/1000ths of the screen, so they spread over any layout. */
     static const short bubbles[][3] = {
-        {520, 70, 46}, {585, 150, 22}, {470, 160, 14}, {90, 300, 30}, {150, 250, 12},
-        {360, 95, 9}, {610, 290, 34}, {300, 320, 18}, {420, 260, 11}, {240, 60, 16},
+        {812, 175, 46}, {914, 375, 22}, {734, 400, 14}, {140, 750, 30}, {234, 625, 12},
+        {562, 237, 9}, {953, 725, 34}, {469, 800, 18}, {656, 650, 11}, {375, 150, 16},
     };
     int horizon = (SCREEN_H - TASKBAR_H) * 3 / 4;
 
     for (int y = 0; y < SCREEN_H; y++) {
         unsigned int color = y < horizon ? mix(theme->sky_top, theme->sky_bottom, y * 256 / horizon)
-                                         : mix(theme->sky_bottom, LIGHTER(theme->sky_bottom, 120),
-                                               (y - horizon) * 256 / (SCREEN_H - horizon));
+                                         : mix(theme->sky_bottom, LIGHTER(theme->sky_bottom, theme->gloss * 2 / 3),
+                                               (y - horizon) * 256 / (SCREEN_H - horizon)); /* a glow at the horizon */
 
         for (int x = 0; x < SCREEN_W; x++)
             wallpaper[y * SCREEN_W + x] = color;
     }
-    for (unsigned int i = 0; i < sizeof(bubbles) / sizeof(bubbles[0]); i++)
-        bubble(bubbles[i][0], bubbles[i][1], bubbles[i][2]);
+    if (theme->bubbles)
+        for (unsigned int i = 0; i < sizeof(bubbles) / sizeof(bubbles[0]); i++)
+            bubble(bubbles[i][0] * SCREEN_W / 1000, bubbles[i][1] * SCREEN_H / 1000, bubbles[i][2]);
 }
 
 void gfx_draw_wallpaper(int top, int height)

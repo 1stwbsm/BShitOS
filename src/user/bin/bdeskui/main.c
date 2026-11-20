@@ -92,24 +92,40 @@ static void open_by_name(const char *name)
     }
 }
 
-static int graphics_available(void)
+/*
+ * Picks the layout: the screen divided by the biggest whole scale that leaves
+ * at least 640x360, so the layout fills the screen exactly (1920x1080 -> 640x360
+ * at 3x, as the mockup has it) instead of sitting in a box. Returns 0 if the
+ * screen is too small.
+ */
+static int pick_layout(void)
 {
     struct bs_sysinfo info;
+    int scale, width, height;
 
     sysinfo(&info);
-    if (info.screen_width >= SCREEN_W && info.screen_height >= SCREEN_H)
-        return 1;
-    if (info.screen_width == 0)
+    if (info.screen_width == 0) {
         printf("\033[93mbdeskui: no graphics mode here (VGA text); staying in the TTY\033[0m\n");
-    else
-        printf("\033[93mbdeskui: needs %ux%u, the screen is %ux%u; staying in the TTY\033[0m\n", SCREEN_W, SCREEN_H,
+        return 0;
+    }
+    if (info.screen_width < MIN_W || info.screen_height < MIN_H) {
+        printf("\033[93mbdeskui: needs %ux%u, the screen is %ux%u; staying in the TTY\033[0m\n", MIN_W, MIN_H,
                info.screen_width, info.screen_height);
-    return 0;
+        return 0;
+    }
+    scale = (int)(info.screen_width / MIN_W < info.screen_height / MIN_H ? info.screen_width / MIN_W
+                                                                          : info.screen_height / MIN_H);
+    while ((int)info.screen_width / scale > MAX_W || (int)info.screen_height / scale > MAX_H)
+        scale++;
+    width = (int)info.screen_width / scale;
+    height = (int)info.screen_height / scale;
+    gfx_init(width, height);
+    return 1;
 }
 
 int main(int argc, char **argv)
 {
-    int x = SCREEN_W / 2, y = SCREEN_H / 2, dirty = 1, frames = 0, told_shutdown = 0;
+    int x, y, dirty = 1, frames = 0, told_shutdown = 0;
     unsigned int buttons = 0;
     struct bs_mouse mouse;
 
@@ -120,12 +136,14 @@ int main(int argc, char **argv)
             return EXIT_TO_TTY;
         argc = 1;
     }
-    if (!graphics_available())
+    if (!pick_layout())
         return EXIT_NO_GRAPHICS;
     bdeskui_conf_get("fullscreen", screen_list, sizeof(screen_list));
     bdeskui_conf_get("tty", tty_list, sizeof(tty_list));
     settings_load();
     gfx_wallpaper();
+    x = SCREEN_W / 2;
+    y = SCREEN_H / 2;
     mouse_read(&mouse); /* discard motion from before we started */
     for (int i = 1; i < argc; i++) /* "bdeskui terminal notes" opens those apps */
         open_by_name(argv[i]);

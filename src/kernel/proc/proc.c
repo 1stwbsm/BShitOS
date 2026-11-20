@@ -44,10 +44,7 @@ void proc_credentials(uint32_t *uid, uint32_t *gid)
 
 static void map_process(const struct proc *p)
 {
-    if (p)
-        paging_use_tables(p->tables[0], p->tables[1]);
-    else
-        paging_use_tables(0, 0);
+    paging_use_tables(p ? (uint32_t *)p->tables : 0);
 }
 
 static int load_image(const struct vnode *file, const char *magic, uint32_t low, uint32_t high,
@@ -179,16 +176,6 @@ int proc_run(const char *path, int argc, char *const *argv)
         strlcpy_checked(child->user.home, "/root", sizeof(child->user.home));
         strlcpy_checked(child->user.shell, "/bin/bsh.bs", sizeof(child->user.shell));
     }
-    child->tables[0] = page_alloc();
-    child->tables[1] = page_alloc();
-    if (!child->tables[0] || !child->tables[1]) {
-        if (child->tables[0])
-            page_free(child->tables[0]);
-        child->used = 0;
-        return -BS_ENOMEM;
-    }
-    memset((void *)child->tables[0], 0, PAGE_SIZE);
-    memset((void *)child->tables[1], 0, PAGE_SIZE);
 
     /* argv lives in kernel memory, so it survives the remap. */
     map_process(child);
@@ -211,9 +198,7 @@ int proc_run(const char *path, int argc, char *const *argv)
         console_graphics_end();
     }
 
-    paging_free_user(child->tables[0], child->tables[1]);
-    page_free(child->tables[0]);
-    page_free(child->tables[1]);
+    paging_free_user(child->tables);
     child->used = 0;
     map_process(parent);
     if (parent)
