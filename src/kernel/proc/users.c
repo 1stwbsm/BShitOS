@@ -7,6 +7,7 @@
 
 #include "drivers/pit.h"
 #include "drivers/rtc.h"
+#include "lib/random.h"
 #include "lib/string.h"
 #include "proc/proc.h"
 #include "proc/users.h"
@@ -152,33 +153,6 @@ int users_login(const char *name, const char *password)
     return 0;
 }
 
-static uint64_t timestamp(void)
-{
-    uint32_t low, high;
-
-    __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
-    return (uint64_t)high << 32 | low;
-}
-
-/* Cycle counter jitter, the clock and a running state, through SHA-256. */
-static void make_salt(uint8_t salt[PASS_SALT_BYTES])
-{
-    static uint8_t state[32];
-    struct pass_sha256 s;
-    uint64_t t;
-    uint32_t seconds = rtc_seconds();
-
-    pass_sha256_init(&s);
-    pass_sha256_update(&s, state, sizeof(state));
-    pass_sha256_update(&s, &seconds, sizeof(seconds));
-    for (int i = 0; i < 64; i++) {
-        t = timestamp();
-        pass_sha256_update(&s, &t, sizeof(t));
-    }
-    pass_sha256_final(&s, state);
-    memcpy(salt, state, PASS_SALT_BYTES);
-}
-
 static int write_shadow(const char *text, uint32_t length)
 {
     struct vnode node;
@@ -217,7 +191,7 @@ int users_set_password(const char *name, const char *old_password, const char *n
             return -BS_EACCES;
         }
     }
-    make_salt(salt);
+    random_bytes(salt, sizeof(salt));
     if (pass_make_record(new_password, salt, record, sizeof(record)) < 0)
         return -BS_EINVAL;
 

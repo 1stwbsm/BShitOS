@@ -4,6 +4,7 @@
 
 #define KERNEL_CS 0x08
 #define VECTOR_SYSCALL 0x80
+#define VECTOR_PAGE_FAULT 14
 #define GATE_KERNEL 0x8E
 #define GATE_USER 0xEE
 
@@ -38,6 +39,20 @@ void trap_handler(struct trapframe *frame)
         return;
     }
 
+    if (frame->vector == VECTOR_PAGE_FAULT) {
+        uint32_t address;
+
+        __asm__ volatile("mov %%cr2, %0" : "=r"(address));
+        if (paging_fault(address) == 0)
+            return; /* a page that should exist now does: try again */
+        if (!(frame->cs & 3) && address >= BS_USER_BASE && address < BS_USER_TOP && proc_current()) {
+            /* the kernel followed a program's bad pointer, or memory ran out */
+            console_print("\nprocess killed: bad pointer or out of memory at 0x");
+            console_print_hex(address);
+            console_print("\n");
+            proc_exit(139);
+        }
+    }
     if (frame->cs & 3) {
         console_print("\nprocess killed: CPU exception ");
         console_print_u32(frame->vector);

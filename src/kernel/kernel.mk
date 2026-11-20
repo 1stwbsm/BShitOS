@@ -11,7 +11,7 @@ KERNEL_SRCS := $(shell find $(KERNEL_DIR) -name '*.c' -o -name '*.S')
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%,$(KERNEL_OBJ_DIR)/%.o,$(KERNEL_SRCS))
 KERNEL_COMMON_OBJS := $(patsubst src/common/%,$(KERNEL_OBJ_DIR)/common/%.o,$(COMMON_SRCS))
 
-KERNEL_CFLAGS := $(COMMON_CFLAGS) -m32 -march=i686 -I$(KERNEL_DIR) -fno-pic -fno-pie \
+KERNEL_CFLAGS := $(COMMON_CFLAGS) -m32 -march=i386 -mtune=generic -I$(KERNEL_DIR) -fno-pic -fno-pie \
                  -fno-asynchronous-unwind-tables -fno-unwind-tables
 
 ROOTFS_FILES += $(KERNEL_ELF)

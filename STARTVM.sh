@@ -20,11 +20,20 @@ VARS=build/efivars.fd
 #   ./STARTVM.sh --live     boot the live ISO, with out/target.img attached as a
 #                           blank disk to try the installer on (su -c install)
 #   ./STARTVM.sh --target   boot out/target.img, once something is installed on it
+#   ./STARTVM.sh --486      boot out/BShitOS.img the old way: a 486 with 8 MiB, BIOS,
+#                           an IDE disk and VGA text mode (no BDeskUI: no graphics)
 LIVE_ISO=out/BShitOS-live.iso
 TARGET=out/target.img
 TARGET_SIZE=2G
 disk() { echo "-drive if=none,id=disk,format=raw,file=$1 -device ide-hd,drive=disk,bus=ide.0,bootindex=1"; }
 case "${1:-}" in
+--486)
+    shift
+    make -j"$(nproc)" --no-print-directory
+    exec qemu-system-i386 -name "BShitOS (486)" -M pc -cpu 486 -m 8M -accel tcg \
+        -drive file="$IMAGE",format=raw,if=ide -netdev user,id=net0 -device e1000,netdev=net0 \
+        -serial stdio "$@"
+    ;;
 --live)
     shift
     make -j"$(nproc)" --no-print-directory iso

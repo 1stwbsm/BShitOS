@@ -53,29 +53,21 @@ void progress(const char *what)
     printf("\033[u\033[K\033[90m%s\033[0m", what);
 }
 
-/* Cycle-counter jitter and the clock, through SHA-256. Good enough for salts and GUIDs. */
 void random_bytes(unsigned char *out, unsigned int count)
 {
-    static unsigned char state[32];
-    struct pass_sha256 s;
-    struct bs_time now;
+    get_random(out, count);
+}
 
-    get_time(&now);
-    while (count) {
-        pass_sha256_init(&s);
-        pass_sha256_update(&s, state, sizeof(state));
-        pass_sha256_update(&s, &now, sizeof(now));
-        for (int i = 0; i < 32; i++) {
-            unsigned int low, high;
+/* Reads up to size bytes of a file; returns the length, or a negative error. */
+static int load_file(const char *path, void *out, unsigned int size)
+{
+    int fd = open(path, BS_O_READ), got;
 
-            __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
-            pass_sha256_update(&s, &low, sizeof(low));
-            pass_sha256_update(&s, &high, sizeof(high));
-        }
-        pass_sha256_final(&s, state);
-        for (unsigned int i = 0; i < 16 && count; i++, count--)
-            *out++ = state[i];
-    }
+    if (fd < 0)
+        return fd;
+    got = read(fd, out, size);
+    close(fd);
+    return got;
 }
 
 static unsigned int crc32(const unsigned char *p, unsigned int n)
@@ -152,8 +144,10 @@ int write_partition_table(const struct plan *plan)
     entries_crc = crc32(entries, sizeof(entries));
     random_guid(disk_guid);
 
-    /* Protective MBR: one 0xEE partition covering the disk, so old tools keep off. */
+    /* Protective MBR: one 0xEE partition covering the disk, so old tools keep off.
+     * Its first 440 bytes are BSBOOT's BIOS boot sector, so the disk boots on BIOS PCs too. */
     memset(sector, 0, SECTOR);
+    load_file(BIOS_BOOT_SECTOR, sector, 440);
     sector[446 + 2] = 2;
     sector[446 + 4] = 0xEE;
     sector[446 + 5] = sector[446 + 6] = sector[446 + 7] = 0xFF;
@@ -168,6 +162,12 @@ int write_partition_table(const struct plan *plan)
         rc = write_zeros(1, ESP_LBA - 1);
     if (rc == 0)
         rc = disk_write_sectors(2, entries, GPT_ENTRY_SECTORS);
+    if (rc == 0) { /* BIOS stage 2, in the gap between the GPT entries and the first partition */
+        int length = load_file(BIOS_STAGE2, chunk, sizeof(chunk));
+
+        if (length > 0)
+            rc = disk_write_sectors(2 + GPT_ENTRY_SECTORS, chunk, ((unsigned int)length + SECTOR - 1) / SECTOR);
+    }
     if (rc == 0) {
         header(sector, 1, last, 2 + GPT_ENTRY_SECTORS, backup_entries - 1, disk_guid, 2, entries_crc);
         rc = disk_write_sectors(1, sector, 1);

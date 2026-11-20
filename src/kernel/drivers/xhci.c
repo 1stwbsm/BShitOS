@@ -1,5 +1,6 @@
 #include <bshit/syscall.h>
 
+#include "proc/memory.h"
 #include "drivers/console.h"
 #include "drivers/pci.h"
 #include "drivers/pit.h"
@@ -165,7 +166,7 @@ struct controller {
     struct device devices[MAX_SLOTS + 1];
 };
 
-static uint8_t pool[POOL_SIZE] __attribute__((aligned(4096)));
+static uint8_t *pool; /* allocated when a controller is found */
 static uint32_t pool_used;
 static struct controller controllers[MAX_CONTROLLERS];
 static int controller_count;
@@ -177,6 +178,12 @@ static void *alloc(uint32_t size, uint32_t align)
 {
     uint32_t start = (pool_used + align - 1) & ~(align - 1);
 
+    if (!pool) {
+        pool = (uint8_t *)pages_alloc(POOL_SIZE / PAGE_SIZE);
+        if (!pool)
+            return 0;
+        memset(pool, 0, POOL_SIZE);
+    }
     if (start + size > POOL_SIZE)
         return 0;
     pool_used = start + size;

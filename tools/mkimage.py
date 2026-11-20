@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Build a GPT disk image: a FAT32 EFI System Partition plus a BSFS partition.
 
-usage: mkimage.py <esp-directory> <bsfs-image> <output-image>
+usage: mkimage.py <esp-directory> <bsfs-image> <output-image> [--bios MBR STAGE2]
+
+With --bios, the protective MBR gets BSBOOT's BIOS boot sector (its first 440
+bytes) and stage 2 goes in the gap after the GPT entries, so the disk boots
+under BIOS as well as UEFI.
 
 Needs no root, loop devices or mtools. Names must fit FAT 8.3 and are stored in
 upper case.
@@ -148,7 +152,10 @@ def partition_entry(kind, name, first, count):
                        first, first + count - 1, 0, name.encode("utf-16-le"))
 
 
-def build_disk(esp, esp_sectors, bsfs):
+STAGE2_LBA = 2 + GPT_ENTRY_SECTORS  # 34, as in src/boot/bios/layout.h
+
+
+def build_disk(esp, esp_sectors, bsfs, bios=None):
     bsfs_sectors = len(bsfs) // SECTOR
     bsfs_lba = ESP_START_LBA + esp_sectors
     bsfs_lba = (bsfs_lba + ESP_START_LBA - 1) // ESP_START_LBA * ESP_START_LBA  # 1 MiB aligned
@@ -162,6 +169,11 @@ def build_disk(esp, esp_sectors, bsfs):
     entries_crc = zlib.crc32(entries)
 
     mbr = bytearray(SECTOR)
+    if bios:
+        boot_sector, stage2 = bios
+        if len(boot_sector) > 440 or STAGE2_LBA * SECTOR + len(stage2) > ESP_START_LBA * SECTOR:
+            raise SystemExit("mkimage: BIOS boot code does not fit")
+        mbr[0:len(boot_sector)] = boot_sector
     mbr[446:462] = struct.pack("<BBBBBBBBII", 0, 0, 2, 0, 0xEE, 0xFF, 0xFF, 0xFF, 1,
                                min(total - 1, 0xFFFFFFFF))
     mbr[510:512] = b"\x55\xAA"
@@ -170,6 +182,8 @@ def build_disk(esp, esp_sectors, bsfs):
     disk[0:SECTOR] = mbr
     disk[SECTOR:2 * SECTOR] = gpt_header(1, total - 1, first_usable, last_usable, disk_guid, 2, entries_crc)
     disk[2 * SECTOR:2 * SECTOR + len(entries)] = entries
+    if bios:
+        disk[STAGE2_LBA * SECTOR:STAGE2_LBA * SECTOR + len(bios[1])] = bios[1]
     disk[ESP_START_LBA * SECTOR:(ESP_START_LBA + esp_sectors) * SECTOR] = esp
     disk[bsfs_lba * SECTOR:(bsfs_lba + bsfs_sectors) * SECTOR] = bsfs
     backup_entries = total - 1 - GPT_ENTRY_SECTORS
@@ -180,9 +194,18 @@ def build_disk(esp, esp_sectors, bsfs):
 
 
 def main():
-    if len(sys.argv) != 4:
+    args = sys.argv[1:]
+    bios = None
+    if "--bios" in args:
+        at = args.index("--bios")
+        with open(args[at + 1], "rb") as f:
+            boot_sector = f.read()
+        with open(args[at + 2], "rb") as f:
+            bios = (boot_sector, f.read())
+        del args[at:at + 3]
+    if len(args) != 3:
         raise SystemExit(__doc__)
-    source, bsfs_path, output = sys.argv[1:]
+    source, bsfs_path, output = args
     with open(bsfs_path, "rb") as f:
         bsfs = f.read()
 
@@ -192,7 +215,7 @@ def main():
     fat = Fat32(esp_sectors)
     root = fat.alloc(dir_clusters(source, top=True))
     fat.add_dir(source, root, None)
-    disk = build_disk(fat.finish(ESP_START_LBA), esp_sectors, bsfs)
+    disk = build_disk(fat.finish(ESP_START_LBA), esp_sectors, bsfs, bios)
 
     # Replace atomically so a VM using the old image keeps a consistent disk.
     temporary = output + ".tmp"

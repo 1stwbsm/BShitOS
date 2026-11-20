@@ -95,7 +95,7 @@ static int make_plan(struct plan *plan)
 
     disk_info(&disk);
     if (!disk.present) {
-        printf("\033[91minstall: no SATA disk found (attach one; IDE/NVMe/USB are not supported)\033[0m\n");
+        printf("\033[91minstall: no hard disk found (SATA or IDE; NVMe and USB are not supported)\033[0m\n");
         return -1;
     }
     memcpy(plan->model, disk.model, sizeof(plan->model));
@@ -156,8 +156,8 @@ int main(void)
 
     printf("\033[1;93mBShitOS installer\033[0m\n");
     printf("  disk    %s, %u MiB\n", plan.model[0] ? plan.model : "SATA disk", mib(plan.disk_sectors));
-    printf("  layout  GPT: ESP %u MiB (BSBOOT) + BSFS %u MiB (the rest)\n", mib(plan.esp_sectors),
-           mib(plan.bsfs_sectors));
+    printf("  layout  GPT: ESP %u MiB (BSBOOT) + BSFS %u MiB (the rest); boots on UEFI and BIOS\n",
+           mib(plan.esp_sectors), mib(plan.bsfs_sectors));
     printf("  copies  this live system, with new accounts; /userspace starts empty\n\n");
 
     do {

@@ -35,6 +35,7 @@ enum bootinfo_fb_format {
     BOOTINFO_FB_NONE = 0,
     BOOTINFO_FB_RGBX = 1, /* byte order in memory */
     BOOTINFO_FB_BGRX = 2,
+    BOOTINFO_FB_TEXT = 3, /* VGA text mode: width x height cells of char + attribute */
 };
 
 struct bootinfo_framebuffer {

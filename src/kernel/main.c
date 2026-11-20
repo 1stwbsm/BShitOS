@@ -6,6 +6,8 @@
 #include "drivers/ahci.h"
 #include "drivers/block.h"
 #include "proc/shutdown.h"
+#include "proc/memory.h"
+#include "arch/x86/cpuinfo.h"
 #include "drivers/console.h"
 #include "drivers/rtc.h"
 #include "drivers/xhci.h"
@@ -67,7 +69,8 @@ static void log_hardware(const struct bootinfo *info)
     console_print_u32(usable_mib(info));
     console_print(" MiB usable\n");
 
-    console_print("[\033[96minfo\033[0m] framebuffer ");
+    console_print(info->framebuffer.format == BOOTINFO_FB_TEXT ? "[\033[96minfo\033[0m] VGA text mode "
+                                                              : "[\033[96minfo\033[0m] framebuffer ");
     console_print_u32(info->framebuffer.width);
     console_print("x");
     console_print_u32(info->framebuffer.height);
@@ -78,6 +81,27 @@ static void log_hardware(const struct bootinfo *info)
     console_print("[\033[96minfo\033[0m] ACPI tables at 0x");
     console_print_hex((uint32_t)info->acpi_rsdp);
     console_print("\n");
+}
+
+static void log_cpu_and_memory(void)
+{
+    uint32_t total, free;
+    static const char *const families[] = {"386", "486", "Pentium", "P6-class"};
+
+    console_print("[\033[96minfo\033[0m] CPU: ");
+    if (cpu.family >= 3)
+        console_print(families[cpu.family > 6 ? 3 : cpu.family - 3]);
+    if (cpu.vendor[0]) {
+        console_print(" (");
+        console_print(cpu.vendor);
+        console_print(")");
+    }
+    console_print(cpu.has_pse ? ", 4 MiB pages" : ", 4 KiB pages only");
+    console_print(cpu.has_tsc ? "\n" : ", no cycle counter\n");
+    mem_stats(&total, &free);
+    console_print("[\033[92m ok \033[0m] memory: ");
+    console_print_u32(free / 1024);
+    console_print(" MiB free for programs, paged in as they touch it\n");
 }
 
 static void print_ip(uint32_t ip)
@@ -99,7 +123,7 @@ static void mount_volumes(const struct bootinfo *info)
     system_live = live;
 
     if (ahci_init() < 0)
-        log_warn("no AHCI storage controller found");
+        console_print("[\033[96minfo\033[0m] no AHCI controller; looking for IDE\n");
     else
         log_ok("AHCI storage controller started");
     if (block_init() == 0) {
@@ -204,6 +228,8 @@ void kmain(const struct bootinfo *info)
     gdt_init();
     boot_seconds = rtc_seconds();
     idt_init();
+    cpu_detect();
+    mem_init(info);
     paging_init();
     console_init(&info->framebuffer);
     console_print("BShitOS kernel starting\n");
@@ -211,8 +237,7 @@ void kmain(const struct bootinfo *info)
     log_ok("console started");
     log_hardware(info);
 
-    proc_init(info);
-    log_ok("process memory ready");
+    log_cpu_and_memory();
     mount_volumes(info);
     apply_config();
     acpi_init(info->acpi_rsdp);

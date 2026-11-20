@@ -18,7 +18,7 @@ struct file {
 
 struct proc {
     int used;
-    uint32_t frames[2];
+    uint32_t tables[2]; /* page tables for the user window, filled on demand */
     uint32_t ksp;
     char cwd[BS_PATH_MAX];
     struct file files[PROC_MAX_FILES];
@@ -27,7 +27,6 @@ struct proc {
     char name[16];       /* the program's file name, for messages */
 };
 
-void proc_init(const struct bootinfo *info);
 struct proc *proc_current(void);
 /* Runs a program to completion; returns its exit code or a negative BS_E*. */
 int proc_run(const char *path, int argc, char *const *argv);

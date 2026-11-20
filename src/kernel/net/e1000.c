@@ -1,4 +1,5 @@
 /* Intel e1000-family Ethernet, using legacy descriptors, polled. */
+#include "proc/memory.h"
 #include "drivers/pci.h"
 #include "drivers/pit.h"
 #include "lib/string.h"
@@ -63,8 +64,18 @@ struct tx_descriptor {
 
 static volatile struct rx_descriptor rx_ring[RX_COUNT] __attribute__((aligned(16)));
 static volatile struct tx_descriptor tx_ring[TX_COUNT] __attribute__((aligned(16)));
-static uint8_t rx_buffers[RX_COUNT][BUFFER_SIZE];
-static uint8_t tx_buffers[TX_COUNT][BUFFER_SIZE];
+static uint8_t (*rx_buffers)[BUFFER_SIZE];
+static uint8_t (*tx_buffers)[BUFFER_SIZE];
+
+/* Allocated when the card is found, so machines without one keep the memory. */
+static int alloc_buffers(void)
+{
+    if (!rx_buffers)
+        rx_buffers = (uint8_t (*)[BUFFER_SIZE])pages_alloc(RX_COUNT * BUFFER_SIZE / PAGE_SIZE);
+    if (!tx_buffers)
+        tx_buffers = (uint8_t (*)[BUFFER_SIZE])pages_alloc(TX_COUNT * BUFFER_SIZE / PAGE_SIZE);
+    return rx_buffers && tx_buffers ? 0 : -1;
+}
 static uint32_t rx_next, tx_next;
 static volatile uint8_t *regs;
 static uint8_t mac[6];
@@ -108,6 +119,8 @@ static int e1000_init(void)
     for (uint32_t i = 0; i < MTA_ENTRIES; i++)
         wr(REG_MTA + i * 4, 0);
 
+    if (alloc_buffers() < 0)
+        return -1;
     for (uint32_t i = 0; i < RX_COUNT; i++) {
         rx_ring[i].address = (uint32_t)rx_buffers[i];
         rx_ring[i].status = 0;

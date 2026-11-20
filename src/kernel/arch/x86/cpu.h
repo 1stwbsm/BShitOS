@@ -23,8 +23,11 @@ extern struct tss kernel_tss;
 void gdt_init(void);
 void idt_init(void);
 void paging_init(void);
-/* Maps a 4 MiB user window: slot 0 at BS_USER_BASE, slot 1 at BS_LIB_BASE. */
-void paging_map_user(unsigned int slot, uint32_t phys);
+/* The user window: a process's two page tables (each covers 4 MiB), or 0, 0. */
+void paging_use_tables(uint32_t table0, uint32_t table1);
+void paging_free_user(uint32_t table0, uint32_t table1);
+/* Maps the page behind a fault if it should exist; 0 if fixed. */
+int paging_fault(uint32_t address);
 
 /*
  * Drops to ring 3 and returns the code later given to leave_user. Nests: each

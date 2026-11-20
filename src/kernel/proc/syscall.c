@@ -10,6 +10,7 @@
 #include "net/net.h"
 #include "proc/proc.h"
 #include "proc/users.h"
+#include "lib/random.h"
 #include "proc/shutdown.h"
 
 #define FB_BLIT_MAX 2048u
@@ -422,6 +423,11 @@ int syscall_dispatch(uint32_t number, uint32_t a, uint32_t b, uint32_t c)
     case SYS_CONSOLE_SIZE: return (int)console_size();
     case SYS_POWEROFF: shutdown_request(BS_SHUTDOWN_POWEROFF); return 0;
     case SYS_SHUTDOWN: shutdown_request((int)a); return shutdown_pending() ? 0 : -BS_EINVAL;
+    case SYS_RANDOM:
+        if (b > 256 || !user_range_ok(a, b))
+            return -BS_EINVAL;
+        random_bytes((void *)a, b);
+        return 0;
     case SYS_NET_INFO: return sys_net_info(a);
     case SYS_DNS:     return sys_dns(a, b);
     case SYS_PING:    return net_configured() ? net_ping(a, b) : -BS_ENETDOWN;

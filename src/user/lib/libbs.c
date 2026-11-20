@@ -50,6 +50,28 @@ int disk_write(const struct bs_disk_io *io) { return syscall3(SYS_DISK_WRITE, (i
 int console_line(int row, char *out, unsigned int size) { return syscall3(SYS_CONSOLE_LINE, row, (int)out, (int)size); }
 int shutdown(int mode) { return syscall3(SYS_SHUTDOWN, mode, 0, 0); }
 
+void get_random(void *out, unsigned int length)
+{
+    unsigned char *p = out;
+
+    while (length) {
+        unsigned int n = length < 256 ? length : 256;
+
+        syscall3(SYS_RANDOM, (int)p, (int)n, 0);
+        p += n;
+        length -= n;
+    }
+}
+
+int cpu_has_cpuid(void)
+{
+    unsigned int before, after;
+
+    __asm__ volatile("pushfl; popl %0; movl %0, %1; xorl $0x200000, %1; pushl %1; popfl; pushfl; popl %1; pushl %0; popfl"
+                     : "=&r"(before), "=&r"(after));
+    return ((before ^ after) & 0x200000) != 0;
+}
+
 int shutting_down(void)
 {
     struct bs_sysinfo info;

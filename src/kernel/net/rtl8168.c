@@ -1,4 +1,5 @@
 /* Realtek RTL8168/8111 PCIe Gigabit Ethernet, polled. */
+#include "proc/memory.h"
 #include "drivers/pci.h"
 #include "drivers/pit.h"
 #include "lib/string.h"
@@ -51,8 +52,18 @@ struct descriptor {
 
 static volatile struct descriptor rx_ring[RX_COUNT] __attribute__((aligned(256)));
 static volatile struct descriptor tx_ring[TX_COUNT] __attribute__((aligned(256)));
-static uint8_t rx_buffers[RX_COUNT][BUFFER_SIZE];
-static uint8_t tx_buffers[TX_COUNT][BUFFER_SIZE];
+static uint8_t (*rx_buffers)[BUFFER_SIZE];
+static uint8_t (*tx_buffers)[BUFFER_SIZE];
+
+/* Allocated when the card is found, so machines without one keep the memory. */
+static int alloc_buffers(void)
+{
+    if (!rx_buffers)
+        rx_buffers = (uint8_t (*)[BUFFER_SIZE])pages_alloc(RX_COUNT * BUFFER_SIZE / PAGE_SIZE);
+    if (!tx_buffers)
+        tx_buffers = (uint8_t (*)[BUFFER_SIZE])pages_alloc(TX_COUNT * BUFFER_SIZE / PAGE_SIZE);
+    return rx_buffers && tx_buffers ? 0 : -1;
+}
 static uint32_t rx_next, tx_next;
 static volatile uint8_t *regs;
 static uint8_t mac_address[6];
@@ -95,6 +106,8 @@ static int rtl8168_init(void)
     wr16(REG_RMS, BUFFER_SIZE);
     wr8(REG_MTPS, MTPS_VALUE);
 
+    if (alloc_buffers() < 0)
+        return -1;
     for (uint32_t i = 0; i < RX_COUNT; i++) {
         rx_ring[i].vlan = 0;
         rx_ring[i].address_low = (uint32_t)rx_buffers[i];

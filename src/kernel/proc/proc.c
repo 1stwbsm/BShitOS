@@ -1,18 +1,17 @@
 /*
  * Processes run synchronously: a parent sleeps inside SYS_SPAWN until its child
- * exits, so all of them can share one kernel stack. Each owns two 4 MiB frames,
- * mapped at the user windows while it runs.
+ * exits, so all of them can share one kernel stack. Each has its own page tables
+ * for the user window, and only the pages it touches get memory.
  */
 #include "arch/x86/cpu.h"
 #include "drivers/console.h"
 #include "lib/string.h"
 #include "net/net.h"
+#include "proc/memory.h"
 #include "proc/proc.h"
 #include "proc/shutdown.h"
 
 #define MAX_PROCS 6
-#define MAX_FRAMES 256
-#define FRAME_SIZE 0x400000u
 #define STACK_SIZE 0x10000u
 #define MAX_NEEDS 4
 #define NEED_NAME 32
@@ -26,31 +25,10 @@ struct bs_header {
 
 static struct proc procs[MAX_PROCS];
 static struct proc *current;
-static uint32_t free_frames[MAX_FRAMES];
-static uint32_t free_frame_count, total_frames;
-
-void proc_init(const struct bootinfo *info)
-{
-    const struct bootinfo_mem_range *ranges =
-        (const struct bootinfo_mem_range *)(uintptr_t)info->mem_ranges;
-
-    for (uint32_t i = 0; i < info->mem_range_count; i++) {
-        uint64_t base = ranges[i].base, end = base + ranges[i].length;
-
-        if (ranges[i].type != BOOTINFO_MEM_USABLE)
-            continue;
-        base = (base + FRAME_SIZE - 1) & ~(uint64_t)(FRAME_SIZE - 1);
-        for (; base + FRAME_SIZE <= end && base + FRAME_SIZE <= 0x100000000ull; base += FRAME_SIZE)
-            if (free_frame_count < MAX_FRAMES)
-                free_frames[free_frame_count++] = (uint32_t)base;
-    }
-    total_frames = free_frame_count;
-}
 
 void proc_memory(uint32_t *total_kib, uint32_t *free_kib)
 {
-    *total_kib = total_frames * (FRAME_SIZE / 1024);
-    *free_kib = free_frame_count * (FRAME_SIZE / 1024);
+    mem_stats(total_kib, free_kib);
 }
 
 struct proc *proc_current(void)
@@ -66,8 +44,10 @@ void proc_credentials(uint32_t *uid, uint32_t *gid)
 
 static void map_process(const struct proc *p)
 {
-    paging_map_user(0, p->frames[0]);
-    paging_map_user(1, p->frames[1]);
+    if (p)
+        paging_use_tables(p->tables[0], p->tables[1]);
+    else
+        paging_use_tables(0, 0);
 }
 
 static int load_image(const struct vnode *file, const char *magic, uint32_t low, uint32_t high,
@@ -174,7 +154,7 @@ int proc_run(const char *path, int argc, char *const *argv)
     for (int i = 0; i < MAX_PROCS && !child; i++)
         if (!procs[i].used)
             child = &procs[i];
-    if (!child || free_frame_count < 2)
+    if (!child)
         return -BS_ENOMEM;
 
     memset(child, 0, sizeof(*child));
@@ -199,12 +179,19 @@ int proc_run(const char *path, int argc, char *const *argv)
         strlcpy_checked(child->user.home, "/root", sizeof(child->user.home));
         strlcpy_checked(child->user.shell, "/bin/bsh.bs", sizeof(child->user.shell));
     }
-    child->frames[0] = free_frames[--free_frame_count];
-    child->frames[1] = free_frames[--free_frame_count];
+    child->tables[0] = page_alloc();
+    child->tables[1] = page_alloc();
+    if (!child->tables[0] || !child->tables[1]) {
+        if (child->tables[0])
+            page_free(child->tables[0]);
+        child->used = 0;
+        return -BS_ENOMEM;
+    }
+    memset((void *)child->tables[0], 0, PAGE_SIZE);
+    memset((void *)child->tables[1], 0, PAGE_SIZE);
 
     /* argv lives in kernel memory, so it survives the remap. */
     map_process(child);
-    memset((void *)BS_USER_BASE, 0, BS_USER_TOP - BS_USER_BASE);
 
     rc = load_image(&node, "BSX1", BS_USER_BASE, BS_LIB_BASE - STACK_SIZE, &header, needs);
     if (rc == 0)
@@ -224,13 +211,13 @@ int proc_run(const char *path, int argc, char *const *argv)
         console_graphics_end();
     }
 
-    free_frames[free_frame_count++] = child->frames[1];
-    free_frames[free_frame_count++] = child->frames[0];
+    paging_free_user(child->tables[0], child->tables[1]);
+    page_free(child->tables[0]);
+    page_free(child->tables[1]);
     child->used = 0;
-    if (parent) {
-        map_process(parent);
+    map_process(parent);
+    if (parent)
         kernel_tss.esp0 = parent->ksp;
-    }
     return rc;
 }
 

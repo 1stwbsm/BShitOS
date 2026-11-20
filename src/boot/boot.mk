@@ -5,7 +5,7 @@ BOOT_DIR := src/boot
 BOOT_OBJ_DIR := $(BUILD)/boot
 BOOT_EFI := $(ESP)/EFI/BOOT/BOOTIA32.EFI
 
-BOOT_SRCS := $(shell find $(BOOT_DIR) -name '*.c')
+BOOT_SRCS := $(shell find $(BOOT_DIR) -path $(BOOT_DIR)/bios -prune -o -name '*.c' -print) # bios/ is the BIOS loader
 BOOT_OBJS := $(patsubst $(BOOT_DIR)/%.c,$(BOOT_OBJ_DIR)/%.o,$(BOOT_SRCS)) \
              $(patsubst src/common/%.c,$(BOOT_OBJ_DIR)/common/%.o,$(COMMON_SRCS))
 

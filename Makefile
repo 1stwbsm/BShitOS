@@ -22,11 +22,13 @@ ROOTFS_FILES :=
 all: $(IMAGE)
 
 include src/boot/boot.mk
+include src/boot/bios/bios.mk
 include src/kernel/kernel.mk
 include src/user/user.mk
 
-# Everything in res/ ships on the boot partition under \RES.
-RES_FILES := $(wildcard res/*)
+# Everything in res/ ships on the boot partition under \RES, except files
+# marked *dont-ship* (working material such as mockups).
+RES_FILES := $(filter-out $(wildcard res/*dont-ship*),$(wildcard res/*))
 ESP_FILES += $(patsubst res/%,$(ESP)/RES/%,$(RES_FILES))
 
 $(ESP)/RES/%: res/%
@@ -60,8 +62,8 @@ $(BSFS_IMAGE): $(ROOTFS_FILES) tools/mkbsfs.py tools/carryover.py
 		--dir userspace/user --dir root --dir bin --dir conf --dir lib --dir mnt \
 		--symlink boot/efi=esp:/ --symlink mnt/cd=cd:/ --symlink mnt/usb=usb:/
 
-$(IMAGE): $(ESP_FILES) $(BSFS_IMAGE) tools/mkimage.py
-	python3 tools/mkimage.py $(ESP) $(BSFS_IMAGE) $@
+$(IMAGE): $(ESP_FILES) $(BSFS_IMAGE) $(MBR_BIN) $(STAGE2_BIN) tools/mkimage.py
+	python3 tools/mkimage.py $(ESP) $(BSFS_IMAGE) $@ --bios $(MBR_BIN) $(STAGE2_BIN)
 
 iso: $(LIVE_ISO)
 

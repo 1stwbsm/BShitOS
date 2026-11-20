@@ -438,6 +438,8 @@ static int has_rdrand(void)
 {
     unsigned int eax = 1, ecx = 0, edx = 0, ebx = 0;
 
+    if (!cpu_has_cpuid())
+        return 0;
     __asm__ volatile("cpuid" : "+a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx));
     (void)ebx;
     (void)edx;
@@ -459,15 +461,8 @@ static u32 rdrand32(void)
     return value;
 }
 
-static u64 rdtsc64(void)
-{
-    u32 low, high;
 
-    __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
-    return (u64)high << 32 | low;
-}
-
-/* Hardware randomness where the CPU has it, otherwise timing jitter. */
+/* The kernel's randomness, plus RDRAND where the CPU has it. */
 static void random_bytes(u8 *out, u32 length)
 {
     static u8 pool[HASH_SIZE];
@@ -480,14 +475,13 @@ static void random_bytes(u8 *out, u32 length)
     sha_update(&s, pool, HASH_SIZE);
     get_time(&now);
     sha_update(&s, &now, sizeof(now));
-    for (int i = 0; i < 64; i++) {
-        u64 tick = rdtsc64();
+    for (int i = 0; i < 8; i++) {
+        u8 seed[32];
         u32 value = hardware ? rdrand32() : 0;
 
-        sha_update(&s, &tick, sizeof(tick));
+        get_random(seed, sizeof(seed)); /* the kernel's timing jitter */
+        sha_update(&s, seed, sizeof(seed));
         sha_update(&s, &value, sizeof(value));
-        if (!hardware && i % 8 == 0)
-            sleep_ms(1);
     }
     sha_final(&s, pool);
 

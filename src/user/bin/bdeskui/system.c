@@ -43,6 +43,10 @@ static void read_cpu_name(void)
 {
     unsigned int regs[12], eax = 0x80000000u, ebx, ecx, edx;
 
+    if (!cpu_has_cpuid()) {
+        copy_string(cpu, sizeof(cpu), "386/486 (no CPUID)");
+        return;
+    }
     __asm__ volatile("cpuid" : "+a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx));
     if (eax < 0x80000004u) {
         copy_string(cpu, sizeof(cpu), "unknown x86 processor");

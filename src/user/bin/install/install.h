@@ -10,6 +10,8 @@
 #define ESP_LBA 2048u
 #define ALIGN_SECTORS 2048u /* 1 MiB */
 #define ESP_SOURCE "/mnt/cd/ESP.IMG"
+#define BIOS_BOOT_SECTOR "/boot/mbr.bin"
+#define BIOS_STAGE2 "/boot/stage2.bin"
 
 typedef unsigned long long u64;
 

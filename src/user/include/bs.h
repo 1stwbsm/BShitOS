@@ -61,6 +61,8 @@ int console_line(int row, char *out, unsigned int size);
  * returns: exit soon after. Long-running programs should poll shutting_down(). */
 int shutdown(int mode);
 int shutting_down(void);
+void get_random(void *out, unsigned int length); /* from the kernel */
+int cpu_has_cpuid(void); /* a 386 or early 486 has no CPUID */
 void net_info(struct bs_netinfo *out);
 int dns_lookup(const char *host, unsigned int *ip); /* also accepts a dotted address */
 int ping(unsigned int ip, unsigned int timeout_ms); /* returns milliseconds */

@@ -6,7 +6,7 @@ USER_DIR := src/user
 USER_OBJ_DIR := $(BUILD)/user
 USER_LDSCRIPT := $(USER_DIR)/user.ld
 
-USER_CFLAGS := $(COMMON_CFLAGS) -m32 -march=i686 -I$(USER_DIR)/include -fno-pic -fno-pie \
+USER_CFLAGS := $(COMMON_CFLAGS) -m32 -march=i386 -mtune=generic -I$(USER_DIR)/include -fno-pic -fno-pie \
                -fno-asynchronous-unwind-tables -fno-unwind-tables
 USER_LDFLAGS := -m elf_i386 -nostdlib -z noexecstack --no-warn-rwx-segments --build-id=none -T $(USER_LDSCRIPT)
 

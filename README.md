@@ -4,7 +4,12 @@ A 32-bit hobby operating system written in C, from the bootloader up.
 
 **Try it in your browser: https://1stwbsm.github.io/BShitOS/**
 
-- **BSBOOT**: a UEFI (IA32) bootloader
+- **BSBOOT**: a UEFI (IA32) bootloader, and a BIOS one (a boot sector plus a real-mode
+  stage 2) on the same disk, so images boot on both
+- **Runs on a 486**: the TTY needs only a 386-class CPU, 4 MiB of RAM, a legacy BIOS, an
+  IDE disk and VGA text mode. The kernel is compiled for i386 and uses PSE, the TSC and
+  CPUID only when they exist. Programs are demand-paged in 4 KiB pages. BDeskUI starts
+  wherever the machine has a VESA framebuffer and 16 MiB or more.
 - **BSFS**: its own filesystem ([docs/BSFS.md](docs/BSFS.md))
 - **The kernel**: paging, ring 3 processes and `int 0x80` system calls, plus drivers
   for the console, framebuffer, PS/2, AHCI, USB and networking
@@ -39,6 +44,7 @@ firmware runs it.
 ./STARTVM.sh            # build and boot out/BShitOS.img in QEMU
 ./STARTVM.sh --live     # boot the live ISO, with a blank out/target.img to install onto
 ./STARTVM.sh --target   # boot whatever got installed onto out/target.img
+./STARTVM.sh --486      # the low end: a 486 with 8 MiB, BIOS, IDE, VGA text
 make                    # just build the disk image
 ```
 

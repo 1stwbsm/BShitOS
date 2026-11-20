@@ -8,3 +8,4 @@ __pycache__/
 *.zip
 *.img
 res/dnb.pcm
+res/*dont-ship*
